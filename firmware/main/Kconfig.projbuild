@@ -1,0 +1,228 @@
+menu "Robot Configuration"
+
+    menu "Motor Pins"
+        config ROBOT_MOTOR_LEFT_RPWM
+            int "Left motor RPWM pin"
+            default 25
+            range 0 39
+            help
+                GPIO pin for left motor reverse PWM (BTS7960 RPWM)
+
+        config ROBOT_MOTOR_LEFT_LPWM
+            int "Left motor LPWM pin"
+            default 26
+            range 0 39
+            help
+                GPIO pin for left motor forward PWM (BTS7960 LPWM)
+
+        config ROBOT_MOTOR_LEFT_REN
+            int "Left motor R_EN pin"
+            default 32
+            range 0 39
+            help
+                GPIO pin for left motor reverse enable (BTS7960 R_EN)
+
+        config ROBOT_MOTOR_LEFT_LEN
+            int "Left motor L_EN pin"
+            default 33
+            range 0 39
+            help
+                GPIO pin for left motor forward enable (BTS7960 L_EN)
+
+        config ROBOT_MOTOR_RIGHT_RPWM
+            int "Right motor RPWM pin"
+            default 27
+            range 0 39
+            help
+                GPIO pin for right motor reverse PWM (BTS7960 RPWM)
+
+        config ROBOT_MOTOR_RIGHT_LPWM
+            int "Right motor LPWM pin"
+            default 14
+            range 0 39
+            help
+                GPIO pin for right motor forward PWM (BTS7960 LPWM)
+
+        config ROBOT_MOTOR_RIGHT_REN
+            int "Right motor R_EN pin"
+            default 12
+            range 0 39
+            help
+                GPIO pin for right motor reverse enable (BTS7960 R_EN)
+
+        config ROBOT_MOTOR_RIGHT_LEN
+            int "Right motor L_EN pin"
+            default 13
+            range 0 39
+            help
+                GPIO pin for right motor forward enable (BTS7960 L_EN)
+    endmenu
+
+    menu "Motor Control"
+        config ROBOT_MOTOR_PWM_FREQ_HZ
+            int "PWM frequency (Hz)"
+            default 20000
+            range 1000 40000
+            help
+                PWM frequency for motor control. Higher frequency = smoother control
+                and less audible noise. BTS7960 supports up to ~25kHz.
+                Default 20kHz is optimal for silent operation.
+                Trade-off: Higher frequency = lower resolution.
+
+        config ROBOT_MOTOR_PWM_RESOLUTION
+            int "PWM resolution (bits)"
+            default 12
+            range 8 14
+            help
+                PWM duty cycle resolution. 
+                12-bit = 4096 steps (0.024% resolution)
+                Formula: actual_freq = 80MHz / (2^resolution)
+                At 12-bit: 80MHz / 4096 = 19.53kHz
+
+        config ROBOT_MOTOR_RAMP_RATE_MS
+            int "Motor ramp rate (ms per 100% change)"
+            default 200
+            range 0 2000
+            help
+                Time to ramp from 0% to 100% speed (slew rate limiting).
+                0 = instant (no ramping), 200 = 200ms for full ramp.
+                Prevents sudden jerks and high current spikes.
+
+        config ROBOT_MOTOR_INVERT_LEFT
+            bool "Invert left motor direction"
+            default n
+            help
+                Swap forward/reverse for left motor if wired backwards
+
+        config ROBOT_MOTOR_INVERT_RIGHT
+            bool "Invert right motor direction"
+            default n
+            help
+                Swap forward/reverse for right motor if wired backwards
+    endmenu
+
+    menu "Differential Drive"
+        config ROBOT_DRIVE_DEADZONE
+            int "Stick deadzone (percent)"
+            default 5
+            range 0 20
+            help
+                Deadzone around stick center (0-20%).
+                Ignores small stick movements to prevent drift.
+
+        config ROBOT_DRIVE_EXPO
+            int "Exponential curve factor (percent)"
+            default 30
+            range 0 100
+            help
+                Expo curve for finer control near center.
+                0 = linear, 100 = maximum expo.
+                Higher values = more precision at low speeds.
+
+        config ROBOT_DRIVE_MAX_SPEED
+            int "Maximum speed limit (percent)"
+            default 100
+            range 10 100
+            help
+                Global speed limit (10-100%).
+                Useful for indoor testing or beginners.
+
+        config ROBOT_DRIVE_SLOW_MODE_FACTOR
+            int "Slow mode speed factor (percent)"
+            default 50
+            range 10 100
+            help
+                Speed multiplier when slow mode active (10-100%).
+                Default 50 = half speed in slow mode.
+    endmenu
+
+    menu "Control Sources"
+        config ROBOT_ENABLE_PS3
+            bool "Enable PS3 controller"
+            default y
+            help
+                Enable PS3 wireless controller via Bluetooth
+
+        config ROBOT_ENABLE_SERIAL
+            bool "Enable Serial (UART) control"
+            default y
+            help
+                Enable control via Serial UART (JSON protocol)
+
+        config ROBOT_SERIAL_BAUD
+            int "Serial baud rate"
+            depends on ROBOT_ENABLE_SERIAL
+            default 115200
+            help
+                UART baud rate for serial control
+
+        config ROBOT_ENABLE_HTTP
+            bool "Enable HTTP (WiFi) control"
+            default y
+            help
+                Enable control via HTTP REST API and web UI
+    endmenu
+
+    menu "WiFi Configuration"
+        depends on ROBOT_ENABLE_HTTP
+
+        choice ROBOT_WIFI_MODE
+            prompt "WiFi mode"
+            default ROBOT_WIFI_MODE_AP
+            help
+                WiFi mode: AP (access point) or STA (station/client)
+
+            config ROBOT_WIFI_MODE_AP
+                bool "Access Point (AP)"
+            config ROBOT_WIFI_MODE_STA
+                bool "Station (STA)"
+        endchoice
+
+        config ROBOT_WIFI_SSID
+            string "WiFi SSID"
+            default "TrackedRobot"
+            help
+                WiFi network name (SSID)
+
+        config ROBOT_WIFI_PASSWORD
+            string "WiFi Password"
+            default "robot123"
+            help
+                WiFi password (min 8 characters for AP mode)
+
+        config ROBOT_WIFI_CHANNEL
+            int "WiFi channel"
+            depends on ROBOT_WIFI_MODE_AP
+            default 1
+            range 1 13
+            help
+                WiFi channel for AP mode (1-13)
+
+        config ROBOT_WIFI_MAX_CONN
+            int "Max connections"
+            depends on ROBOT_WIFI_MODE_AP
+            default 4
+            range 1 10
+            help
+                Maximum number of simultaneous WiFi connections in AP mode
+    endmenu
+
+    menu "Safety"
+        config ROBOT_FAILSAFE_TIMEOUT_MS
+            int "Failsafe timeout (ms)"
+            default 500
+            range 100 5000
+            help
+                Control input timeout. If no input received for this duration,
+                motors will stop automatically. 500ms = half second.
+
+        config ROBOT_STATUS_LED_PIN
+            int "Status LED pin"
+            default 2
+            range -1 39
+            help
+                GPIO pin for status LED. Set to -1 to disable.
+                GPIO 2 is the built-in LED on most ESP32 DevKitC boards.
+    endmenu
+
+endmenu
