@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracked Robot Firmware Flasher</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Tracked Robot Firmware Flasher</h1>
+            <p class="subtitle">Flash firmware directly from your browser</p>
+        </header>
+
+        <main>
+            <div class="card">
+                <h2>Requirements</h2>
+                <ul class="requirements">
+                    <li>✓ Chrome, Edge, or Opera browser</li>
+                    <li>✓ ESP32 DevKitC connected via USB</li>
+                    <li>✓ No drivers needed</li>
+                </ul>
+            </div>
+
+            <div class="card status-card">
+                <h2>Status</h2>
+                <div id="status" class="status">
+                    <div class="status-icon">⚪</div>
+                    <span id="statusText">Not connected</span>
+                </div>
+                <div id="progress-container" class="progress-container" style="display: none;">
+                    <div class="progress-bar">
+                        <div id="progress" class="progress-fill"></div>
+                    </div>
+                    <div id="progressText" class="progress-text">0%</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Instructions</h2>
+                <ol class="instructions">
+                    <li>Click <strong>"Connect"</strong> button</li>
+                    <li>Select your ESP32 port from the browser dialog</li>
+                    <li>Click <strong>"Flash Firmware"</strong> button</li>
+                    <li>Wait for flashing to complete (~30 seconds)</li>
+                    <li>ESP32 will automatically reset</li>
+                </ol>
+            </div>
+
+            <div class="card actions-card">
+                <button id="connectBtn" class="btn btn-primary">Connect</button>
+                <button id="flashBtn" class="btn btn-success" disabled>Flash Firmware</button>
+                <button id="disconnectBtn" class="btn btn-secondary" disabled>Disconnect</button>
+            </div>
+
+            <div class="card log-card">
+                <h3>Log</h3>
+                <div id="log" class="log"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank">Web Serial API</a></p>
+            <p><a href="https://github.com/joachimth/track-robot-v2" target="_blank">View on GitHub</a></p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

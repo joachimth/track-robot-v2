@@ -1,0 +1,7 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# ESP32-WROVER-IE 8MB Flash Partition Table
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 2M,
+www,      data, spiffs,  0x210000,512K,
+storage,  data, spiffs,  0x290000,1M,

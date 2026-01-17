@@ -1,0 +1,91 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Extract version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Setup ESP-IDF
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: v5.1.2
+        target: esp32
+
+    - name: Build firmware
+      working-directory: firmware
+      run: |
+        . $IDF_PATH/export.sh
+        idf.py build
+
+    - name: Copy binaries
+      run: |
+        mkdir -p release
+        cp firmware/build/bootloader/bootloader.bin release/
+        cp firmware/build/partition_table/partition-table.bin release/
+        cp firmware/build/track-robot.bin release/
+
+    - name: Generate manifest
+      run: |
+        cat > release/manifest.json << 'MANEOF'
+        {
+          "name": "Tracked Robot Firmware",
+          "version": "${{ steps.version.outputs.VERSION }}",
+          "builds": [{
+            "chipFamily": "ESP32",
+            "parts": [
+              {"path": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/bootloader.bin", "offset": 4096},
+              {"path": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/partition-table.bin", "offset": 32768},
+              {"path": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/track-robot.bin", "offset": 65536}
+            ]
+          }]
+        }
+        MANEOF
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release v${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        files: |
+          release/bootloader.bin
+          release/partition-table.bin
+          release/track-robot.bin
+          release/manifest.json
+        body: |
+          ## Tracked Robot Firmware v${{ steps.version.outputs.VERSION }}
+
+          ### Web Flasher (Easiest)
+          https://${{ github.repository_owner }}.github.io/track-robot-v2/
+
+          ### Manual Flash (esptool)
+          ```bash
+          esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
+            --before default_reset --after hard_reset write_flash \
+            0x1000 bootloader.bin \
+            0x8000 partition-table.bin \
+            0x10000 track-robot.bin
+          ```
+
+          ### Files
+          - `bootloader.bin` - ESP32 bootloader
+          - `partition-table.bin` - Partition table
+          - `track-robot.bin` - Main application
+          - `manifest.json` - Web flasher manifest

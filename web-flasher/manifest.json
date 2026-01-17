@@ -1,0 +1,21 @@
+{
+  "name": "Tracked Robot Firmware",
+  "version": "0.0.0",
+  "builds": [{
+    "chipFamily": "ESP32",
+    "parts": [
+      {
+        "path": "https://github.com/joachimth/track-robot-v2/releases/download/v0.0.0/bootloader.bin",
+        "offset": 4096
+      },
+      {
+        "path": "https://github.com/joachimth/track-robot-v2/releases/download/v0.0.0/partition-table.bin",
+        "offset": 32768
+      },
+      {
+        "path": "https://github.com/joachimth/track-robot-v2/releases/download/v0.0.0/track-robot.bin",
+        "offset": 65536
+      }
+    ]
+  }]
+}
