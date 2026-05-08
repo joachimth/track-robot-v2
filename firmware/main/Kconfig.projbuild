@@ -171,20 +171,13 @@ menu "Robot Configuration"
     endmenu
 
     menu "Control Sources"
-        config ROBOT_ENABLE_PS3
-            bool "Enable PS3 controller"
-            default y
-            help
-                Enable PS3 wireless controller via Bluetooth Classic.
-                Requires the PS3 library to be present in components/ps3/.
-
         config ROBOT_ENABLE_PS4
             bool "Enable PS4 controller"
-            default n
+            default y
             help
-                Enable PS4 wireless controller via Bluetooth Classic.
-                Requires a PS4 library in components/ps4/.
-                Currently a stub - connect your PS4 library to use this.
+                Enable PS4 DualShock 4 wireless controller via Bluetooth Classic HID.
+                Uses ESP-IDF built-in esp_hidh component — no third-party library needed.
+                Press PS+Share on the controller to enter pairing mode.
 
         config ROBOT_ENABLE_SERIAL
             bool "Enable Serial (UART) control"

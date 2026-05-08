@@ -1,3 +1,5 @@
-# PS4 controller component - placeholder
-# Replace with actual PS4 Bluetooth library (e.g. https://github.com/aed3/psx-esp32)
-idf_component_register()
+idf_component_register(
+    SRCS "ps4.c"
+    INCLUDE_DIRS "include"
+    REQUIRES bt esp_hid freertos
+)
