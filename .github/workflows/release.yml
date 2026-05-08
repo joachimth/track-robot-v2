@@ -25,17 +25,12 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-    - name: Setup ESP-IDF
+    - name: Build firmware
       uses: espressif/esp-idf-ci-action@v1
       with:
         esp_idf_version: v5.1.2
         target: esp32
-
-    - name: Build firmware
-      working-directory: firmware
-      run: |
-        . $IDF_PATH/export.sh
-        idf.py build
+        path: firmware
 
     - name: Copy binaries
       run: |
