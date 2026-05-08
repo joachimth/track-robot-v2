@@ -1,8 +1,6 @@
 name: Deploy Web Flasher
 
 on:
-  push:
-    branches: [ main ]
   release:
     types: [ published ]
   workflow_dispatch:
@@ -38,40 +36,43 @@ jobs:
         mkdir -p _site
         cp -r web-flasher/* _site/
 
-    - name: Generate manifest from latest release
+    - name: Download firmware binaries and generate manifest
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pick the most recent release (stable first, then pre-release).
-        # /releases/latest only returns stable; /releases returns all sorted
-        # by created_at desc, so .[0] is always the newest regardless of type.
+        # Get the most recent release (includes the rolling 'latest' release)
         TAG=$(gh api repos/${{ github.repository }}/releases \
               --jq '.[0].tag_name // empty' 2>/dev/null || echo '')
 
         if [ -z "$TAG" ]; then
-          echo "No release found — keeping placeholder manifest (builds: [])"
+          echo "No release found — keeping placeholder manifest"
           exit 0
         fi
 
         VERSION="${TAG#v}"
-        BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
-        echo "Generating manifest for ${TAG}"
+        echo "Downloading binaries from release ${TAG}"
 
+        # Download binaries directly into _site/ so they are served from
+        # the same origin as the web flasher (avoids GitHub CDN CORS issues)
+        gh release download "$TAG" \
+          --pattern "bootloader.bin" \
+          --pattern "partition-table.bin" \
+          --pattern "track-robot.bin" \
+          --dir _site/
+
+        # Manifest uses relative paths — no cross-origin fetch needed
         jq -n \
           --arg name "Tracked Robot Firmware" \
           --arg version "$VERSION" \
-          --arg boot  "${BASE}/bootloader.bin" \
-          --arg pt    "${BASE}/partition-table.bin" \
-          --arg app   "${BASE}/track-robot.bin" \
           '{
             name: $name,
             version: $version,
             builds: [{
               chipFamily: "ESP32",
               parts: [
-                { path: $boot, offset: 4096  },
-                { path: $pt,   offset: 32768 },
-                { path: $app,  offset: 65536 }
+                { path: "bootloader.bin",      offset: 4096  },
+                { path: "partition-table.bin", offset: 32768 },
+                { path: "track-robot.bin",     offset: 65536 }
               ]
             }]
           }' > _site/manifest.json
