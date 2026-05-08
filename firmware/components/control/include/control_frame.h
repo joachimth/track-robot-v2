@@ -14,8 +14,9 @@
 typedef enum {
     CONTROL_SOURCE_NONE = 0,
     CONTROL_SOURCE_PS3 = 1,
-    CONTROL_SOURCE_SERIAL = 2,
-    CONTROL_SOURCE_HTTP = 3,
+    CONTROL_SOURCE_PS4 = 2,
+    CONTROL_SOURCE_SERIAL = 3,
+    CONTROL_SOURCE_HTTP = 4,
 } control_source_t;
 
 /**

@@ -1,61 +1,95 @@
 menu "Robot Configuration"
 
     menu "Motor Pins"
+        comment "Left Motor (Track A) - IBT-2 wiring"
+
         config ROBOT_MOTOR_LEFT_RPWM
-            int "Left motor RPWM pin"
-            default 25
-            range 0 39
-            help
-                GPIO pin for left motor reverse PWM (BTS7960 RPWM)
-
-        config ROBOT_MOTOR_LEFT_LPWM
-            int "Left motor LPWM pin"
-            default 26
-            range 0 39
-            help
-                GPIO pin for left motor forward PWM (BTS7960 LPWM)
-
-        config ROBOT_MOTOR_LEFT_REN
-            int "Left motor R_EN pin"
-            default 32
-            range 0 39
-            help
-                GPIO pin for left motor reverse enable (BTS7960 R_EN)
-
-        config ROBOT_MOTOR_LEFT_LEN
-            int "Left motor L_EN pin"
-            default 33
-            range 0 39
-            help
-                GPIO pin for left motor forward enable (BTS7960 L_EN)
-
-        config ROBOT_MOTOR_RIGHT_RPWM
-            int "Right motor RPWM pin"
+            int "Left motor RPWM pin (forward PWM)"
             default 27
             range 0 39
             help
-                GPIO pin for right motor reverse PWM (BTS7960 RPWM)
+                GPIO pin for left motor forward PWM (IBT-2 RPWM). Wired to GPIO 27.
 
-        config ROBOT_MOTOR_RIGHT_LPWM
-            int "Right motor LPWM pin"
+        config ROBOT_MOTOR_LEFT_LPWM
+            int "Left motor LPWM pin (reverse PWM)"
             default 14
             range 0 39
             help
-                GPIO pin for right motor forward PWM (BTS7960 LPWM)
+                GPIO pin for left motor reverse PWM (IBT-2 LPWM). Wired to GPIO 14.
+
+        config ROBOT_MOTOR_LEFT_REN
+            int "Left motor R_EN pin (enable)"
+            default 25
+            range 0 39
+            help
+                GPIO pin for left motor right-half enable (IBT-2 R_EN). Wired to GPIO 25.
+
+        config ROBOT_MOTOR_LEFT_LEN
+            int "Left motor L_EN pin (enable)"
+            default 26
+            range 0 39
+            help
+                GPIO pin for left motor left-half enable (IBT-2 L_EN). Wired to GPIO 26.
+
+        comment "Right Motor (Track B) - IBT-2 wiring"
+
+        config ROBOT_MOTOR_RIGHT_RPWM
+            int "Right motor RPWM pin (forward PWM)"
+            default 18
+            range 0 39
+            help
+                GPIO pin for right motor forward PWM (IBT-2 RPWM). Wired to GPIO 18.
+
+        config ROBOT_MOTOR_RIGHT_LPWM
+            int "Right motor LPWM pin (reverse PWM)"
+            default 19
+            range 0 39
+            help
+                GPIO pin for right motor reverse PWM (IBT-2 LPWM). Wired to GPIO 19.
 
         config ROBOT_MOTOR_RIGHT_REN
-            int "Right motor R_EN pin"
-            default 12
+            int "Right motor R_EN pin (enable)"
+            default 33
             range 0 39
             help
-                GPIO pin for right motor reverse enable (BTS7960 R_EN)
+                GPIO pin for right motor right-half enable (IBT-2 R_EN). Wired to GPIO 33.
 
         config ROBOT_MOTOR_RIGHT_LEN
-            int "Right motor L_EN pin"
-            default 13
+            int "Right motor L_EN pin (enable)"
+            default 32
             range 0 39
             help
-                GPIO pin for right motor forward enable (BTS7960 L_EN)
+                GPIO pin for right motor left-half enable (IBT-2 L_EN). Wired to GPIO 32.
+
+        comment "Current Sense (ADC) - optional, for future overcurrent protection"
+
+        config ROBOT_MOTOR_LEFT_RIS
+            int "Left motor R_IS ADC pin"
+            default 34
+            range 32 39
+            help
+                ADC pin for left motor current sense output (IBT-2 R_IS). Wired to GPIO 34.
+
+        config ROBOT_MOTOR_LEFT_LIS
+            int "Left motor L_IS ADC pin"
+            default 35
+            range 32 39
+            help
+                ADC pin for left motor current sense output (IBT-2 L_IS). Wired to GPIO 35.
+
+        config ROBOT_MOTOR_RIGHT_RIS
+            int "Right motor R_IS ADC pin"
+            default 36
+            range 32 39
+            help
+                ADC pin for right motor current sense output (IBT-2 R_IS). Wired to GPIO 36 (VP).
+
+        config ROBOT_MOTOR_RIGHT_LIS
+            int "Right motor L_IS ADC pin"
+            default 39
+            range 32 39
+            help
+                ADC pin for right motor current sense output (IBT-2 L_IS). Wired to GPIO 39 (VN).
     endmenu
 
     menu "Motor Control"
@@ -65,7 +99,7 @@ menu "Robot Configuration"
             range 1000 40000
             help
                 PWM frequency for motor control. Higher frequency = smoother control
-                and less audible noise. BTS7960 supports up to ~25kHz.
+                and less audible noise. BTS7960/IBT-2 supports up to ~25kHz.
                 Default 20kHz is optimal for silent operation.
                 Trade-off: Higher frequency = lower resolution.
 
@@ -74,7 +108,7 @@ menu "Robot Configuration"
             default 12
             range 8 14
             help
-                PWM duty cycle resolution. 
+                PWM duty cycle resolution.
                 12-bit = 4096 steps (0.024% resolution)
                 Formula: actual_freq = 80MHz / (2^resolution)
                 At 12-bit: 80MHz / 4096 = 19.53kHz
@@ -141,7 +175,16 @@ menu "Robot Configuration"
             bool "Enable PS3 controller"
             default y
             help
-                Enable PS3 wireless controller via Bluetooth
+                Enable PS3 wireless controller via Bluetooth Classic.
+                Requires the PS3 library to be present in components/ps3/.
+
+        config ROBOT_ENABLE_PS4
+            bool "Enable PS4 controller"
+            default n
+            help
+                Enable PS4 wireless controller via Bluetooth Classic.
+                Requires a PS4 library in components/ps4/.
+                Currently a stub - connect your PS4 library to use this.
 
         config ROBOT_ENABLE_SERIAL
             bool "Enable Serial (UART) control"
