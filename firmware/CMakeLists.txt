@@ -20,10 +20,27 @@ if(NOT EXISTS "${BLUEPAD32_ROOT}/src/components/bluepad32/CMakeLists.txt")
 endif()
 
 set(BTSTACK_ROOT "${BLUEPAD32_ROOT}/external/btstack")
+set(BTSTACK_ESP32_PORT "${BTSTACK_ROOT}/port/esp32")
+set(BTSTACK_COMPONENT_DIR "${BTSTACK_ESP32_PORT}/components/btstack")
 
-# Project components + Bluepad32 components
+# Bluepad32 requires BTstack to be generated/installed as an ESP-IDF component.
+# Upstream recommends running external/btstack/port/esp32/integrate_btstack.py.
+if(NOT EXISTS "${BTSTACK_COMPONENT_DIR}/CMakeLists.txt")
+    message(STATUS "Integrating BTstack ESP-IDF component")
+    execute_process(
+        COMMAND python3 integrate_btstack.py
+        WORKING_DIRECTORY ${BTSTACK_ESP32_PORT}
+        RESULT_VARIABLE BTSTACK_INTEGRATE_RESULT
+    )
+    if(NOT BTSTACK_INTEGRATE_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to integrate BTstack component")
+    endif()
+endif()
+
+# Project components + Bluepad32 / BTstack components
 set(EXTRA_COMPONENT_DIRS
     "${BLUEPAD32_ROOT}/src/components"
+    "${BTSTACK_ESP32_PORT}/components"
     "components/ps4"
     "components/control"
     "components/motor"
