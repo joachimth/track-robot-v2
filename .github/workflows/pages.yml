@@ -1,8 +1,14 @@
 name: Deploy Web Flasher
 
 on:
+  workflow_run:
+    workflows: ["Firmware CI"]
+    types: [completed]
+    branches: [main]
+
   release:
     types: [ published ]
+
   workflow_dispatch:
 
 permissions:
@@ -19,9 +25,14 @@ env:
 
 jobs:
   deploy:
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     runs-on: ubuntu-latest
 
     steps:
