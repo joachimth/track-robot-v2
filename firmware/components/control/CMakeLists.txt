@@ -4,7 +4,7 @@ set(SRCS
     "controller_http.c"
 )
 
-set(REQS driver esp_http_server esp_wifi json motor motion safety)
+set(REQS driver esp_http_server esp_wifi json nvs_flash motor motion safety)
 
 if(CONFIG_ROBOT_ENABLE_PS3)
     list(APPEND SRCS "controller_ps3.c")

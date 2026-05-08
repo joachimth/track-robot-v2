@@ -29,6 +29,14 @@
 
 static const char *TAG = "main";
 
+// ESP-IDF does not define disabled bool Kconfig symbols - provide 0 fallbacks
+#ifndef CONFIG_ROBOT_MOTOR_INVERT_LEFT
+#define CONFIG_ROBOT_MOTOR_INVERT_LEFT 0
+#endif
+#ifndef CONFIG_ROBOT_MOTOR_INVERT_RIGHT
+#define CONFIG_ROBOT_MOTOR_INVERT_RIGHT 0
+#endif
+
 /**
  * @brief Initialize NVS (Non-Volatile Storage)
  */
@@ -73,7 +81,7 @@ void app_main(void) {
         .pwm_freq_hz = CONFIG_ROBOT_MOTOR_PWM_FREQ_HZ,
         .pwm_resolution = CONFIG_ROBOT_MOTOR_PWM_RESOLUTION,
         .ramp_rate_ms = CONFIG_ROBOT_MOTOR_RAMP_RATE_MS,
-        .invert_left = CONFIG_ROBOT_MOTOR_INVERT_LEFT,
+        .invert_left  = CONFIG_ROBOT_MOTOR_INVERT_LEFT,
         .invert_right = CONFIG_ROBOT_MOTOR_INVERT_RIGHT,
     };
     ESP_ERROR_CHECK(motor_bts7960_init(&motor_cfg));
