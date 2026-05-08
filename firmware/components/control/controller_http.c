@@ -51,6 +51,14 @@ static esp_timer_handle_t reconnect_timer = NULL;
 static esp_err_t start_fallback_ap(void);
 static esp_err_t connect_sta_from_saved_config(void);
 
+static void safe_copy(char *dst, size_t dst_len, const char *src) {
+    if (!dst || dst_len == 0) return;
+    if (!src) src = "";
+    size_t n = strnlen(src, dst_len - 1);
+    memcpy(dst, src, n);
+    dst[n] = '\0';
+}
+
 static bool nvs_read_string(const char *key, char *out, size_t out_len) {
     nvs_handle_t nvs;
     esp_err_t ret = nvs_open(WIFI_NVS_NAMESPACE, NVS_READONLY, &nvs);
@@ -100,11 +108,8 @@ static void schedule_reconnect(void) {
     esp_timer_start_once(reconnect_timer, WIFI_RECONNECT_MS * 1000ULL);
 }
 
-/**
- * @brief WiFi event handler
- */
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-                                int32_t event_id, void *event_data) {
+                               int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT) {
         if (event_id == WIFI_EVENT_AP_START) {
             ap_started = true;
@@ -140,8 +145,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 static esp_err_t start_fallback_ap(void) {
-    if (ap_started) return ESP_OK;
-
     wifi_config_t ap_config = {
         .ap = {
             .ssid = WIFI_AP_SSID,
@@ -157,13 +160,13 @@ static esp_err_t start_fallback_ap(void) {
         ap_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
-    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
-    if (ret != ESP_OK) return ret;
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
 
-    ret = esp_wifi_set_config(WIFI_IF_AP, &ap_config);
-    if (ret != ESP_OK) return ret;
+    if (!ap_started) {
+        ESP_LOGI(TAG, "Starting fallback setup AP...");
+    }
 
-    ESP_LOGI(TAG, "Starting fallback setup AP...");
     return ESP_OK;
 }
 
@@ -174,8 +177,8 @@ static esp_err_t connect_sta_from_saved_config(void) {
     bool has_saved_ssid = nvs_read_string(WIFI_NVS_KEY_SSID, ssid, sizeof(ssid));
     if (!has_saved_ssid) {
 #ifdef CONFIG_ROBOT_WIFI_MODE_STA
-        strncpy(ssid, CONFIG_ROBOT_WIFI_SSID, sizeof(ssid) - 1);
-        strncpy(password, CONFIG_ROBOT_WIFI_PASSWORD, sizeof(password) - 1);
+        safe_copy(ssid, sizeof(ssid), CONFIG_ROBOT_WIFI_SSID);
+        safe_copy(password, sizeof(password), CONFIG_ROBOT_WIFI_PASSWORD);
         has_saved_ssid = ssid[0] != '\0';
 #endif
     } else {
@@ -187,11 +190,11 @@ static esp_err_t connect_sta_from_saved_config(void) {
         return start_fallback_ap();
     }
 
-    strncpy(active_sta_ssid, ssid, sizeof(active_sta_ssid) - 1);
+    safe_copy(active_sta_ssid, sizeof(active_sta_ssid), ssid);
 
     wifi_config_t sta_config = {0};
-    strncpy((char *)sta_config.sta.ssid, ssid, sizeof(sta_config.sta.ssid) - 1);
-    strncpy((char *)sta_config.sta.password, password, sizeof(sta_config.sta.password) - 1);
+    safe_copy((char *)sta_config.sta.ssid, sizeof(sta_config.sta.ssid), ssid);
+    safe_copy((char *)sta_config.sta.password, sizeof(sta_config.sta.password), password);
     sta_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
     sta_config.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
 
@@ -214,9 +217,6 @@ static esp_err_t connect_sta_from_saved_config(void) {
     return ret == ESP_OK ? ESP_OK : start_fallback_ap();
 }
 
-/**
- * @brief Initialize WiFi as AP+STA with setup fallback
- */
 static esp_err_t init_wifi(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     esp_err_t ret = esp_event_loop_create_default();
@@ -248,18 +248,13 @@ static esp_err_t init_wifi(void) {
     ESP_ERROR_CHECK(esp_timer_create(&reconnect_args, &reconnect_timer));
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    // Always start AP so the robot is reachable, then also try STA if configured.
     ESP_ERROR_CHECK(start_fallback_ap());
+    ESP_ERROR_CHECK(esp_wifi_start());
     connect_sta_from_saved_config();
 
     return ESP_OK;
 }
 
-/**
- * @brief POST /control handler
- */
 static esp_err_t control_post_handler(httpd_req_t *req) {
     char buf[128];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -288,7 +283,6 @@ static esp_err_t control_post_handler(httpd_req_t *req) {
     if (slow) frame.slow_mode = cJSON_IsTrue(slow);
 
     cJSON_Delete(root);
-
     control_manager_submit(CONTROL_SOURCE_HTTP, &frame);
 
     httpd_resp_set_type(req, "application/json");
@@ -296,9 +290,6 @@ static esp_err_t control_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/**
- * @brief POST /wifi handler
- */
 static esp_err_t wifi_post_handler(httpd_req_t *req) {
     char buf[256];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -340,9 +331,6 @@ static esp_err_t wifi_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/**
- * @brief POST /estop handler
- */
 static esp_err_t estop_post_handler(httpd_req_t *req) {
     control_frame_t frame = {0};
     frame.estop = true;
@@ -354,9 +342,6 @@ static esp_err_t estop_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/**
- * @brief POST /arm handler
- */
 static esp_err_t arm_post_handler(httpd_req_t *req) {
     control_frame_t frame = {0};
     frame.arm = true;
@@ -368,9 +353,6 @@ static esp_err_t arm_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/**
- * @brief GET /status handler
- */
 static esp_err_t status_get_handler(httpd_req_t *req) {
     char json[384];
     snprintf(json, sizeof(json),
@@ -387,9 +369,6 @@ static esp_err_t status_get_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/**
- * @brief GET / handler (web UI)
- */
 static esp_err_t index_get_handler(httpd_req_t *req) {
     const char *html =
         "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -426,9 +405,6 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/**
- * @brief Start HTTP server
- */
 static esp_err_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
@@ -439,34 +415,22 @@ static esp_err_t start_webserver(void) {
         return ESP_FAIL;
     }
 
-    httpd_uri_t uri_control = {
-        .uri = "/control", .method = HTTP_POST, .handler = control_post_handler
-    };
+    httpd_uri_t uri_control = {.uri = "/control", .method = HTTP_POST, .handler = control_post_handler};
     httpd_register_uri_handler(server, &uri_control);
 
-    httpd_uri_t uri_wifi = {
-        .uri = "/wifi", .method = HTTP_POST, .handler = wifi_post_handler
-    };
+    httpd_uri_t uri_wifi = {.uri = "/wifi", .method = HTTP_POST, .handler = wifi_post_handler};
     httpd_register_uri_handler(server, &uri_wifi);
 
-    httpd_uri_t uri_estop = {
-        .uri = "/estop", .method = HTTP_POST, .handler = estop_post_handler
-    };
+    httpd_uri_t uri_estop = {.uri = "/estop", .method = HTTP_POST, .handler = estop_post_handler};
     httpd_register_uri_handler(server, &uri_estop);
 
-    httpd_uri_t uri_arm = {
-        .uri = "/arm", .method = HTTP_POST, .handler = arm_post_handler
-    };
+    httpd_uri_t uri_arm = {.uri = "/arm", .method = HTTP_POST, .handler = arm_post_handler};
     httpd_register_uri_handler(server, &uri_arm);
 
-    httpd_uri_t uri_status = {
-        .uri = "/status", .method = HTTP_GET, .handler = status_get_handler
-    };
+    httpd_uri_t uri_status = {.uri = "/status", .method = HTTP_GET, .handler = status_get_handler};
     httpd_register_uri_handler(server, &uri_status);
 
-    httpd_uri_t uri_index = {
-        .uri = "/", .method = HTTP_GET, .handler = index_get_handler
-    };
+    httpd_uri_t uri_index = {.uri = "/", .method = HTTP_GET, .handler = index_get_handler};
     httpd_register_uri_handler(server, &uri_index);
 
     ESP_LOGI(TAG, "HTTP server started");
