@@ -1,13 +1,6 @@
 /**
  * @file ps4.c
  * @brief PS4 DualShock 4 controller driver using ESP-IDF esp_hidh
- *
- * Maps gamepad state to control_frame_t:
- *   Left stick Y (inverted) -> throttle
- *   Left stick X            -> steering
- *   Options                 -> arm
- *   Cross                   -> emergency stop
- *   L1                      -> slow mode
  */
 
 #include "ps4.h"
@@ -19,6 +12,7 @@
 #include "esp_bt_device.h"
 #include "esp_gap_bt_api.h"
 #include "esp_mac.h"
+#include "esp_event.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -27,19 +21,8 @@
 static const char *TAG = "ps4";
 
 #define PS4_DEVICE_NAME  "Wireless Controller"
-// BT inquiry length in 1.28 s units (8 = ~10 s)
 #define PS4_INQ_LEN      8
-#define PS4_REPORT_MIN_LEN   7
 #define PS4_RESCAN_DELAY_MS  3000
-
-// Input report offsets (after the optional 0x01 report-ID byte)
-#define OFF_LX      0
-#define OFF_LY      1
-#define OFF_RX      2
-#define OFF_RY      3
-#define OFF_BTNS1   4
-#define OFF_BTNS2   5
-#define OFF_BTNS3   6
 
 static ps4_callback_t    s_callback = NULL;
 static ps4_gamepad_t     s_gamepad  = {0};
@@ -47,11 +30,29 @@ static SemaphoreHandle_t s_mutex    = NULL;
 static bool              s_connecting = false;
 static bool              s_discovering = false;
 
-static float axis_norm(uint8_t raw) {
-    float v = ((float)raw - 128.0f) / 127.0f;
-    if (v >  1.0f) v =  1.0f;
-    if (v < -1.0f) v = -1.0f;
-    return v;
+static esp_err_t ensure_event_loop(void) {
+    esp_err_t ret = esp_event_loop_create_default();
+
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Created default ESP event loop");
+        return ESP_OK;
+    }
+
+    if (ret == ESP_ERR_INVALID_STATE) {
+        ESP_LOGI(TAG, "Default ESP event loop already exists");
+        return ESP_OK;
+    }
+
+    ESP_LOGE(TAG, "Failed to create default event loop: %s", esp_err_to_name(ret));
+    return ret;
+}
+
+bool ps4_is_connected(void) {
+    if (!s_mutex) return false;
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    bool c = s_gamepad.connected;
+    xSemaphoreGive(s_mutex);
+    return c;
 }
 
 static esp_err_t ps4_start_discovery(void) {
@@ -59,12 +60,18 @@ static esp_err_t ps4_start_discovery(void) {
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "Starting BT discovery — press and hold PS+Share until controller flashes quickly");
-    esp_err_t ret = esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY,
-                                               PS4_INQ_LEN, 0);
+    ESP_LOGI(TAG, "Starting BT discovery — press PS+Share until fast blink");
+
+    esp_err_t ret = esp_bt_gap_start_discovery(
+        ESP_BT_INQ_MODE_GENERAL_INQUIRY,
+        PS4_INQ_LEN,
+        0
+    );
+
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "BT discovery start: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "BT discovery start failed: %s", esp_err_to_name(ret));
     }
+
     return ret;
 }
 
@@ -74,43 +81,9 @@ static void ps4_scan_task(void *arg) {
         vTaskDelay(pdMS_TO_TICKS((PS4_INQ_LEN * 1280) + PS4_RESCAN_DELAY_MS));
     }
 
-    ESP_LOGI(TAG, "PS4 scan task done — controller is connected");
+    ESP_LOGI(TAG, "PS4 scan task exiting — controller connected");
     vTaskDelete(NULL);
 }
-
-static void parse_report(const uint8_t *d, size_t len) {
-    if (len < PS4_REPORT_MIN_LEN) return;
-
-    ps4_gamepad_t g = {.connected = true};
-
-    g.lx = axis_norm(d[OFF_LX]);
-    g.ly = axis_norm(d[OFF_LY]);
-    g.rx = axis_norm(d[OFF_RX]);
-    g.ry = axis_norm(d[OFF_RY]);
-
-    uint8_t b1 = d[OFF_BTNS1];
-    g.square   = (b1 & BIT(4)) != 0;
-    g.cross    = (b1 & BIT(5)) != 0;
-    g.circle   = (b1 & BIT(6)) != 0;
-    g.triangle = (b1 & BIT(7)) != 0;
-
-    uint8_t b2 = d[OFF_BTNS2];
-    g.l1      = (b2 & BIT(0)) != 0;
-    g.r1      = (b2 & BIT(1)) != 0;
-    g.l2      = (b2 & BIT(2)) != 0;
-    g.r2      = (b2 & BIT(3)) != 0;
-    g.options = (b2 & BIT(5)) != 0;
-
-    g.ps = (d[OFF_BTNS3] & BIT(0)) != 0;
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-    memcpy(&s_gamepad, &g, sizeof(ps4_gamepad_t));
-    xSemaphoreGive(s_mutex);
-
-    if (s_callback) s_callback(&g);
-}
-
-// ---- HIDH event handler ------------------------------------------------
 
 static void hidh_event_handler(void *arg, esp_event_base_t base,
                                 int32_t id, void *event_data)
@@ -121,8 +94,10 @@ static void hidh_event_handler(void *arg, esp_event_base_t base,
     switch (event) {
         case ESP_HIDH_OPEN_EVENT:
             s_connecting = false;
+
             if (p->open.status == ESP_OK) {
                 ESP_LOGI(TAG, "PS4 controller connected");
+
                 xSemaphoreTake(s_mutex, portMAX_DELAY);
                 s_gamepad.connected = true;
                 xSemaphoreGive(s_mutex);
@@ -131,22 +106,13 @@ static void hidh_event_handler(void *arg, esp_event_base_t base,
             }
             break;
 
-        case ESP_HIDH_INPUT_EVENT: {
-            const uint8_t *d  = p->input.data;
-            size_t         len = p->input.length;
-            if (len > 0 && d[0] == 0x01) {
-                parse_report(d + 1, len - 1);
-            } else {
-                parse_report(d, len);
-            }
-            break;
-        }
-
         case ESP_HIDH_CLOSE_EVENT:
-            ESP_LOGW(TAG, "PS4 controller disconnected, restarting scan");
+            ESP_LOGW(TAG, "PS4 disconnected");
+
             xSemaphoreTake(s_mutex, portMAX_DELAY);
             memset(&s_gamepad, 0, sizeof(s_gamepad));
             xSemaphoreGive(s_mutex);
+
             s_connecting = false;
             xTaskCreate(ps4_scan_task, "ps4_scan", 4096, NULL, 3, NULL);
             break;
@@ -156,162 +122,146 @@ static void hidh_event_handler(void *arg, esp_event_base_t base,
     }
 }
 
-// ---- BT GAP event handler (discovery) ----------------------------------
-
-static void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
+static void bt_gap_cb(esp_bt_gap_cb_event_t event,
+                      esp_bt_gap_cb_param_t *param)
 {
-    if (event == ESP_BT_GAP_DISC_RES_EVT) {
-        if (s_connecting) return;   // already found one
+    if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT) {
 
-        const char *found_name = NULL;
-        esp_bd_addr_t found_bda;
+        if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) {
+            s_discovering = true;
+            ESP_LOGI(TAG, "BT discovery started");
+
+        } else if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
+            s_discovering = false;
+            ESP_LOGI(TAG, "BT discovery stopped");
+        }
+
+    } else if (event == ESP_BT_GAP_DISC_RES_EVT) {
+
+        if (s_connecting) return;
 
         for (int i = 0; i < param->disc_res.num_prop; i++) {
             esp_bt_gap_dev_prop_t *prop = &param->disc_res.prop[i];
 
             if (prop->type == ESP_BT_GAP_DEV_PROP_BDNAME && prop->len > 0) {
-                found_name = (const char *)prop->val;
-                ESP_LOGI(TAG, "BT device found: %s", found_name);
-            } else if (prop->type == ESP_BT_GAP_DEV_PROP_EIR) {
-                // Try to extract the complete or short local name from EIR
-                uint8_t name_len = 0;
-                uint8_t *eir_name = esp_bt_gap_resolve_eir_data(
-                    (uint8_t *)prop->val,
-                    ESP_BT_EIR_TYPE_CMPL_LOCAL_NAME, &name_len);
-                if (!eir_name) {
-                    eir_name = esp_bt_gap_resolve_eir_data(
-                        (uint8_t *)prop->val,
-                        ESP_BT_EIR_TYPE_SHORT_LOCAL_NAME, &name_len);
-                }
-                if (eir_name && name_len > 0) {
-                    ESP_LOGI(TAG, "BT device found via EIR: %.*s", name_len, (char *)eir_name);
-                    // eir_name is not null-terminated; compare by length
-                    if (name_len >= strlen(PS4_DEVICE_NAME) &&
-                        memcmp(eir_name, PS4_DEVICE_NAME,
-                               strlen(PS4_DEVICE_NAME)) == 0) {
-                        memcpy(found_bda, param->disc_res.bda, sizeof(esp_bd_addr_t));
-                        s_connecting = true;
-                        ESP_LOGI(TAG, "PS4 found via EIR — connecting");
-                        esp_bt_gap_cancel_discovery();
-                        esp_hidh_dev_open(found_bda, ESP_HID_TRANSPORT_BT, 0);
-                        return;
-                    }
+                const char *name = (const char *)prop->val;
+
+                ESP_LOGI(TAG, "BT device found: %s", name);
+
+                if (strstr(name, PS4_DEVICE_NAME)) {
+                    s_connecting = true;
+
+                    ESP_LOGI(TAG, "PS4 controller found — opening HID connection");
+
+                    esp_bt_gap_cancel_discovery();
+
+                    esp_hidh_dev_open(
+                        param->disc_res.bda,
+                        ESP_HID_TRANSPORT_BT,
+                        0
+                    );
+
+                    return;
                 }
             }
-        }
-
-        if (found_name && strstr(found_name, PS4_DEVICE_NAME)) {
-            memcpy(found_bda, param->disc_res.bda, sizeof(esp_bd_addr_t));
-            s_connecting = true;
-            ESP_LOGI(TAG, "PS4 found: %s — connecting", found_name);
-            esp_bt_gap_cancel_discovery();
-            esp_hidh_dev_open(found_bda, ESP_HID_TRANSPORT_BT, 0);
-        }
-
-    } else if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT) {
-        if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
-            s_discovering = false;
-            if (!s_connecting && !ps4_is_connected()) {
-                ESP_LOGW(TAG, "PS4 not found — retrying shortly, press PS+Share until fast blink");
-            }
-        } else if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) {
-            s_discovering = true;
-            ESP_LOGI(TAG, "BT discovery started — press PS+Share on PS4 controller");
         }
     }
 }
-
-// ---- Public API --------------------------------------------------------
 
 esp_err_t ps4_init(const uint8_t *host_mac, ps4_callback_t callback) {
     esp_err_t ret;
 
-    ESP_LOGI(TAG, "Creating PS4 state mutex");
+    ESP_LOGI(TAG, "Creating PS4 mutex");
+
     s_mutex = xSemaphoreCreateMutex();
-    if (!s_mutex) return ESP_ERR_NO_MEM;
+    if (!s_mutex) {
+        return ESP_ERR_NO_MEM;
+    }
 
     s_callback = callback;
 
+    ESP_LOGI(TAG, "Ensuring ESP event loop exists");
+    ret = ensure_event_loop();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
     if (host_mac) {
-        ESP_LOGI(TAG, "Setting custom Bluetooth base MAC");
-        ret = esp_base_mac_addr_set(host_mac);
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "esp_base_mac_addr_set: %s", esp_err_to_name(ret));
-        }
+        ESP_LOGI(TAG, "Setting custom BT MAC");
+        esp_base_mac_addr_set(host_mac);
     }
 
-    // BT controller. The firmware is configured for BTDM in sdkconfig.defaults;
-    // enabling BTDM keeps Classic HID available for PS4 while avoiding
-    // ESP_ERR_INVALID_ARG on builds where CLASSIC-only enable is not accepted.
     ESP_LOGI(TAG, "Initializing BT controller");
+
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+
     ret = esp_bt_controller_init(&bt_cfg);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "BT controller init: %s", esp_err_to_name(ret));
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "BT controller init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_LOGI(TAG, "Enabling BT controller in BTDM mode");
+    ESP_LOGI(TAG, "Enabling BTDM mode");
+
     ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "BT controller enable BTDM: %s", esp_err_to_name(ret));
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "BT enable failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    // Bluedroid host stack
     ESP_LOGI(TAG, "Initializing Bluedroid");
+
     ret = esp_bluedroid_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Bluedroid init: %s", esp_err_to_name(ret));
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Bluedroid init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
     ESP_LOGI(TAG, "Enabling Bluedroid");
+
     ret = esp_bluedroid_enable();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Bluedroid enable: %s", esp_err_to_name(ret));
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Bluedroid enable failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_LOGI(TAG, "Setting BT device name and scan mode");
-    esp_bt_dev_set_device_name("TrackRobot");
-    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
-
-    // Register GAP callback for device discovery
     ESP_LOGI(TAG, "Registering GAP callback");
+
     ret = esp_bt_gap_register_callback(bt_gap_cb);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GAP register callback: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "GAP callback failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    // Initialize HID host
     ESP_LOGI(TAG, "Initializing HID host");
+
     esp_hidh_config_t hidh_cfg = {
-        .callback         = hidh_event_handler,
+        .callback = hidh_event_handler,
         .event_stack_size = 4096,
-        .callback_arg     = NULL,
+        .callback_arg = NULL,
     };
+
     ret = esp_hidh_init(&hidh_cfg);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "HIDH init: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "HID host init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_LOGI(TAG, "PS4 driver ready — scanning will retry automatically");
-    BaseType_t task_ret = xTaskCreate(ps4_scan_task, "ps4_scan", 4096, NULL, 3, NULL);
+    ESP_LOGI(TAG, "PS4 driver initialized successfully");
+
+    BaseType_t task_ret = xTaskCreate(
+        ps4_scan_task,
+        "ps4_scan",
+        4096,
+        NULL,
+        3,
+        NULL
+    );
+
     if (task_ret != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create PS4 scan task");
+        ESP_LOGE(TAG, "Failed to create scan task");
         return ESP_FAIL;
     }
 
     return ESP_OK;
-}
-
-bool ps4_is_connected(void) {
-    if (!s_mutex) return false;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-    bool c = s_gamepad.connected;
-    xSemaphoreGive(s_mutex);
-    return c;
 }
