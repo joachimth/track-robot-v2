@@ -6,11 +6,16 @@
 #include "ps4.h"
 
 #include "esp_log.h"
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
+#include "btstack_port_esp32.h"
+#include "btstack_run_loop.h"
+#include "btstack_stdio_esp32.h"
 #include "uni.h"
+#include "bt/uni_bt.h"
 #include "controller/uni_gamepad.h"
 #include "platform/uni_platform.h"
 
@@ -22,6 +27,7 @@ static const char *TAG = "gamepad";
 static ps4_callback_t s_callback = NULL;
 static SemaphoreHandle_t s_mutex = NULL;
 static ps4_gamepad_t s_state = {0};
+static bool s_started = false;
 
 static float normalize_axis(int32_t v) {
     float f = (float)v / 512.0f;
@@ -37,6 +43,8 @@ static float normalize_axis(int32_t v) {
 }
 
 static void update_gamepad_state(const uni_gamepad_t* gp) {
+    ps4_gamepad_t snapshot;
+
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
     s_state.connected = true;
@@ -65,35 +73,47 @@ static void update_gamepad_state(const uni_gamepad_t* gp) {
     s_state.dpad_left = (gp->dpad & DPAD_LEFT) != 0;
     s_state.dpad_right = (gp->dpad & DPAD_RIGHT) != 0;
 
+    snapshot = s_state;
     xSemaphoreGive(s_mutex);
 
     if (s_callback) {
-        s_callback(&s_state);
+        s_callback(&snapshot);
     }
 }
 
-static int32_t platform_init(int argc, const char** argv) {
+static void platform_init(int argc, const char** argv) {
+    (void)argc;
+    (void)argv;
     ESP_LOGI(TAG, "Bluepad32 platform init");
-    return 0;
 }
 
 static void platform_on_init_complete(void) {
     ESP_LOGI(TAG, "Bluepad32 ready");
-    ESP_LOGI(TAG, "Put controller in pairing mode now");
+    ESP_LOGI(TAG, "Starting controller scan / autoconnect");
     ESP_LOGI(TAG, "PS4: Hold SHARE + PS until rapid blinking");
+
+    uni_bt_start_scanning_and_autoconnect_unsafe();
+    uni_bt_allow_incoming_connections(true);
 }
 
-static uni_error_t platform_on_device_connected(uni_hid_device_t* d) {
+static uni_error_t platform_on_device_discovered(bd_addr_t addr, const char* name, uint16_t cod, uint8_t rssi) {
+    (void)addr;
+    (void)cod;
+    ESP_LOGI(TAG, "Discovered device: %s RSSI=%d", name ? name : "(unknown)", rssi);
+    return UNI_ERROR_SUCCESS;
+}
+
+static void platform_on_device_connected(uni_hid_device_t* d) {
+    (void)d;
     ESP_LOGI(TAG, "Controller connected");
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_state.connected = true;
     xSemaphoreGive(s_mutex);
-
-    return UNI_ERROR_SUCCESS;
 }
 
 static void platform_on_device_disconnected(uni_hid_device_t* d) {
+    (void)d;
     ESP_LOGW(TAG, "Controller disconnected");
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
@@ -101,7 +121,14 @@ static void platform_on_device_disconnected(uni_hid_device_t* d) {
     xSemaphoreGive(s_mutex);
 }
 
+static uni_error_t platform_on_device_ready(uni_hid_device_t* d) {
+    (void)d;
+    ESP_LOGI(TAG, "Controller ready");
+    return UNI_ERROR_SUCCESS;
+}
+
 static void platform_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
+    (void)d;
     if (!ctl) return;
 
     if (ctl->klass != UNI_CONTROLLER_CLASS_GAMEPAD) {
@@ -111,27 +138,48 @@ static void platform_on_controller_data(uni_hid_device_t* d, uni_controller_t* c
     update_gamepad_state(&ctl->gamepad);
 }
 
-static uni_platform_t s_platform = {
+static const uni_property_t* platform_get_property(uni_property_idx_t idx) {
+    (void)idx;
+    return NULL;
+}
+
+static void platform_on_oob_event(uni_platform_oob_event_t event, void* data) {
+    (void)data;
+    ESP_LOGI(TAG, "Bluepad32 OOB event: %d", event);
+}
+
+static struct uni_platform s_platform = {
     .name = "track-robot",
     .init = platform_init,
     .on_init_complete = platform_on_init_complete,
+    .on_device_discovered = platform_on_device_discovered,
     .on_device_connected = platform_on_device_connected,
     .on_device_disconnected = platform_on_device_disconnected,
+    .on_device_ready = platform_on_device_ready,
     .on_controller_data = platform_on_controller_data,
+    .get_property = platform_get_property,
+    .on_oob_event = platform_on_oob_event,
 };
 
 static void bluepad_task(void* arg) {
-    ESP_LOGI(TAG, "Starting Bluepad32 backend");
+    (void)arg;
+    ESP_LOGI(TAG, "Starting Bluepad32 / BTstack backend");
 
+#ifdef CONFIG_ESP_CONSOLE_UART
+#ifndef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+    btstack_stdio_init();
+#endif
+#endif
+
+    btstack_init();
     uni_platform_set_custom(&s_platform);
-
     uni_init(0, NULL);
 
-    ESP_LOGI(TAG, "Bluepad32 initialized");
+    ESP_LOGI(TAG, "Entering BTstack run loop");
+    btstack_run_loop_execute();
 
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    ESP_LOGE(TAG, "BTstack run loop returned unexpectedly");
+    vTaskDelete(NULL);
 }
 
 esp_err_t ps4_init(const uint8_t *host_mac, ps4_callback_t callback) {
@@ -141,15 +189,22 @@ esp_err_t ps4_init(const uint8_t *host_mac, ps4_callback_t callback) {
 
     s_callback = callback;
 
-    s_mutex = xSemaphoreCreateMutex();
     if (!s_mutex) {
-        return ESP_ERR_NO_MEM;
+        s_mutex = xSemaphoreCreateMutex();
+        if (!s_mutex) {
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    if (s_started) {
+        ESP_LOGW(TAG, "Bluepad32 backend already started");
+        return ESP_OK;
     }
 
     BaseType_t ret = xTaskCreate(
         bluepad_task,
         "bluepad32",
-        8192,
+        12288,
         NULL,
         5,
         NULL
@@ -160,7 +215,8 @@ esp_err_t ps4_init(const uint8_t *host_mac, ps4_callback_t callback) {
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "Bluepad32 backend started");
+    s_started = true;
+    ESP_LOGI(TAG, "Bluepad32 backend task started");
 
     return ESP_OK;
 }
