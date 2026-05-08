@@ -1,3 +1,2 @@
-[submodule "firmware/components/ps3"]
-	path = firmware/components/ps3
-	url = https://github.com/joachimth/esp32-ps3.git
+# PS3 library is bundled directly in firmware/components/ps3/ (not a submodule).
+# Source: https://github.com/jvpernis/esp32-ps3 with IDF v5.x patches applied.

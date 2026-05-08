@@ -15,12 +15,17 @@
 
 // Component includes
 #include "control_manager.h"
-#include "controller_ps3.h"
 #include "controller_serial.h"
 #include "controller_http.h"
 #include "motor_bts7960.h"
 #include "mixer_diffdrive.h"
 #include "safety_failsafe.h"
+#ifdef CONFIG_ROBOT_ENABLE_PS3
+#include "controller_ps3.h"
+#endif
+#ifdef CONFIG_ROBOT_ENABLE_PS4
+#include "controller_ps4.h"
+#endif
 
 static const char *TAG = "main";
 
@@ -44,7 +49,7 @@ static void init_nvs(void) {
 void app_main(void) {
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "  Tracked Robot Firmware v0.1.0");
-    ESP_LOGI(TAG, "  ESP32-WROVER-IE | BTS7960 | PS3 Controller");
+    ESP_LOGI(TAG, "  ESP32-WROOM-32 | IBT-2 (BTS7960) | PS3/PS4");
     ESP_LOGI(TAG, "=================================================");
 
     // Initialize NVS
@@ -90,15 +95,26 @@ void app_main(void) {
 #ifdef CONFIG_ROBOT_ENABLE_PS3
     // Initialize PS3 controller
     ESP_LOGI(TAG, "Initializing PS3 controller...");
-    // NOTE: User must set their controller's MAC address here
+    // Set the Bluetooth MAC address the PS3 controller will pair to.
+    // Run idf.py monitor, note the BT MAC printed at boot, then update here.
     uint8_t ps3_mac[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-    ESP_LOGW(TAG, "*** REPLACE PS3 MAC ADDRESS IN main.c ***");
+    ESP_LOGW(TAG, "*** SET YOUR ESP32 BT MAC IN main.c (currently placeholder) ***");
     ESP_LOGW(TAG, "Current MAC: %02X:%02X:%02X:%02X:%02X:%02X",
-             ps3_mac[0], ps3_mac[1], ps3_mac[2], 
+             ps3_mac[0], ps3_mac[1], ps3_mac[2],
              ps3_mac[3], ps3_mac[4], ps3_mac[5]);
     ESP_ERROR_CHECK(controller_ps3_init(ps3_mac));
 #else
     ESP_LOGI(TAG, "PS3 controller disabled in config");
+#endif
+
+#ifdef CONFIG_ROBOT_ENABLE_PS4
+    // Initialize PS4 controller
+    ESP_LOGI(TAG, "Initializing PS4 controller...");
+    uint8_t ps4_mac[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+    ESP_LOGW(TAG, "*** SET YOUR ESP32 BT MAC IN main.c for PS4 ***");
+    ESP_ERROR_CHECK(controller_ps4_init(ps4_mac));
+#else
+    ESP_LOGI(TAG, "PS4 controller disabled in config");
 #endif
 
 #ifdef CONFIG_ROBOT_ENABLE_SERIAL
