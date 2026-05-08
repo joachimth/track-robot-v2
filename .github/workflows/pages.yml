@@ -42,9 +42,11 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Query the latest published release via GitHub API
-        RELEASE=$(gh api repos/${{ github.repository }}/releases/latest 2>/dev/null || echo '{}')
-        TAG=$(echo "$RELEASE" | jq -r '.tag_name // empty')
+        # Pick the most recent release (stable first, then pre-release).
+        # /releases/latest only returns stable; /releases returns all sorted
+        # by created_at desc, so .[0] is always the newest regardless of type.
+        TAG=$(gh api repos/${{ github.repository }}/releases \
+              --jq '.[0].tag_name // empty' 2>/dev/null || echo '')
 
         if [ -z "$TAG" ]; then
           echo "No release found — keeping placeholder manifest (builds: [])"
