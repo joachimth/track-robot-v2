@@ -1,46 +1,46 @@
 # Architecture Overview
 
-This document describes the high-level architecture of the tracked robot firmware.
+High-level architecture of the tracked robot firmware.
 
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     ESP32-WROVER-IE                          │
+│                     ESP32-WROOM-32                           │
 │                                                              │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐           │
-│  │    PS3     │  │   Serial   │  │    HTTP    │           │
-│  │ Controller │  │ Controller │  │ Controller │           │
-│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘           │
-│        │               │               │                   │
-│        └───────────────┴───────────────┘                   │
-│                        │                                    │
-│                 ┌──────▼──────┐                            │
-│                 │   Control   │                            │
-│                 │   Manager   │ (Arbitration)             │
-│                 └──────┬──────┘                            │
-│                        │                                    │
-│                 ┌──────▼──────┐                            │
-│                 │   Safety    │                            │
-│                 │  & Failsafe │                            │
-│                 └──────┬──────┘                            │
-│                        │                                    │
-│                 ┌──────▼──────┐                            │
-│                 │ Differential│                            │
-│                 │    Mixer    │                            │
-│                 └──────┬──────┘                            │
-│                        │                                    │
-│                 ┌──────▼──────┐                            │
-│                 │    Motor    │                            │
-│                 │   Control   │                            │
-│                 └──────┬──────┘                            │
-│                        │                                    │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
+│  │    PS4     │  │   Serial   │  │    HTTP    │            │
+│  │ Controller │  │ Controller │  │ Controller │            │
+│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘            │
+│        │               │               │                    │
+│        └───────────────┴───────────────┘                    │
+│                        │                                     │
+│                 ┌──────▼──────┐                             │
+│                 │   Control   │                             │
+│                 │   Manager   │  (Arbitration)              │
+│                 └──────┬──────┘                             │
+│                        │                                     │
+│                 ┌──────▼──────┐                             │
+│                 │   Safety    │                             │
+│                 │  & Failsafe │                             │
+│                 └──────┬──────┘                             │
+│                        │                                     │
+│                 ┌──────▼──────┐                             │
+│                 │ Differential│                             │
+│                 │    Mixer    │                             │
+│                 └──────┬──────┘                             │
+│                        │                                     │
+│                 ┌──────▼──────┐                             │
+│                 │    Motor    │                             │
+│                 │   Control   │                             │
+│                 └──────┬──────┘                             │
+│                        │                                     │
 └────────────────────────┼────────────────────────────────────┘
                          │
          ┌───────────────┴───────────────┐
          │                               │
     ┌────▼────┐                     ┌────▼────┐
-    │BTS7960  │                     │BTS7960  │
+    │ IBT-2   │                     │ IBT-2   │
     │  Left   │                     │  Right  │
     └────┬────┘                     └────┬────┘
          │                               │
@@ -54,240 +54,169 @@ This document describes the high-level architecture of the tracked robot firmwar
 
 ### 1. Control Sources
 
-Three independent control sources, all producing standardized `control_frame_t`:
+All three sources produce a standardized `control_frame_t` and submit it via
+`control_manager_submit()`.
 
-#### PS3 Controller (`controller_ps3.c`)
-- **Interface**: Bluetooth Classic (BR/EDR)
-- **Library**: joachimth/esp32-ps3
-- **Inputs**: Analog sticks, buttons
-- **Mapping**:
-  - Left stick Y → throttle
-  - Right stick X → steering
-  - X button → emergency stop
-  - START button → arm/disarm
-  - Triangle → toggle slow mode
+#### PS4 Controller (`controller_ps4.c` + `ps4.c`)
+
+- **Transport**: Bluetooth Classic HID (ESP-IDF `esp_hidh`)
+- **Discovery**: BT GAP inquiry scan on boot; connects to "Wireless Controller"
+- **Button mapping**:
+  - Left stick Y → throttle (inverted: up = forward)
+  - Left stick X → steering
+  - Options → arm
+  - Cross → emergency stop
+  - L1 → slow mode
 
 #### Serial Controller (`controller_serial.c`)
-- **Interface**: UART (default 115200 baud)
-- **Protocol**: JSON lines
-- **Example**: `{"throttle": 0.5, "steering": -0.2}`
-- **Use case**: External microcontroller, PC control
+
+- **Transport**: UART (115200 baud, 8N1)
+- **Protocol**: JSON lines (`{"throttle": 0.5, "steering": -0.2}`)
+- **Use case**: External microcontroller, PC automation
 
 #### HTTP Controller (`controller_http.c`)
-- **Interface**: WiFi (AP or STA mode)
-- **Protocol**: REST API + simple web UI
-- **Endpoints**:
-  - `POST /control` - Send throttle/steering
-  - `POST /estop` - Emergency stop
-  - `POST /arm` - Arm system
-  - `GET /status` - Get current state
-  - `GET /` - Web UI
+
+- **Transport**: Wi-Fi (AP or STA mode)
+- **Protocol**: REST + basic web UI
+- **Endpoints**: `POST /control`, `POST /estop`, `POST /arm`, `GET /status`, `GET /`
 
 ### 2. Control Manager (`control_manager.c`)
 
-**Arbitration Logic**: "Owner Lock" model
+**Arbitration model**: "Last owner" — the most recently active source holds
+control until it times out (500 ms default).
 
-- Last active source takes control
-- Source remains owner until timeout (500ms default)
-- Timeout → safe stop (motors off)
-- No priority system (all sources equal)
-
-**Control Loop**:
-- Runs at 50Hz (20ms period)
-- Checks timeout
-- Handles arming/disarming
-- Passes control frame to mixer
-- Updates safety watchdog
+**Control loop** (50 Hz / 20 ms):
+1. Check timeout → if expired, clear active source and zero frame
+2. Handle e-stop → call `safety_emergency_stop()`
+3. Handle arm request → call `safety_arm()`
+4. Update watchdog
+5. Mix and drive motors (only if armed)
 
 ### 3. Safety & Failsafe (`safety_failsafe.c`)
 
 **States**:
-- `DISARMED` - Motors disabled (boot default)
-- `ARMED` - Motors enabled
-- `ESTOP` - Emergency stop (latched)
 
-**Safety Features**:
-- Boot disarmed (never move unexpectedly)
-- Failsafe timeout (auto-disarm on input loss)
-- Emergency stop (immediate motor stop)
-- Re-arm required after e-stop
-- Status LED patterns
+```
+DISARMED ──[arm]──→ ARMED ──[estop]──→ ESTOP
+   ↑                  │                  │
+   └──[timeout]───────┘    [arm]────────→ DISARMED
+```
 
-**Failsafe Behavior**:
-1. Control input stops
-2. Timeout timer starts (500ms)
-3. Timeout expires → auto-disarm
-4. Motors stop via `motor_emergency_stop()`
+- **Boot default**: DISARMED — motors never move unexpectedly on power-up
+- **Watchdog timeout**: Auto-disarm after 500 ms of no control input
+- **E-stop**: Latched; requires explicit re-arm to clear
 
 ### 4. Differential Drive Mixer (`mixer_diffdrive.c`)
 
-Converts `(throttle, steering)` → `(left_speed, right_speed)`
+Converts `(throttle, steering)` → `(left_speed, right_speed)`.
 
-**Algorithm**:
 ```
-1. Apply deadzone (ignore small inputs near zero)
-2. Apply expo curve (finer control near center)
-3. Mix: left = throttle + steering
-        right = throttle - steering
+1. Apply deadzone  (ignore inputs within ±deadzone of zero)
+2. Apply expo      (finer control near centre)
+3. Mix:  left  = throttle + steering
+         right = throttle - steering
 4. Clamp to [-1.0, +1.0]
-5. Apply max speed limit
-6. Apply slow mode factor (if enabled)
+5. Scale by max_speed
+6. If slow_mode: scale by slow_mode_factor (default 50%)
 ```
-
-**Configuration**:
-- `deadzone`: 0-20% (default 5%)
-- `expo`: 0-100% (default 30%)
-- `max_speed`: 10-100% (default 100%)
-- `slow_mode_factor`: 10-100% (default 50%)
 
 ### 5. Motor Control (`motor_bts7960.c`)
 
-**Features**:
-- Dual BTS7960 H-bridge drivers
-- 20kHz PWM @ 12-bit resolution
-- Ramping/slew rate limiting (200ms default)
-- Per-motor direction inversion
-- Emergency stop (bypass ramping)
-
-**PWM Channels**:
-- Left motor: RPWM (reverse), LPWM (forward)
-- Right motor: RPWM (reverse), LPWM (forward)
-- Enable pins: R_EN, L_EN (always high)
-
-**Ramping**:
-- Limits acceleration to prevent current spikes
-- Configurable ramp rate (ms per 100% change)
-- Emergency stop bypasses ramping
+- Dual IBT-2 / BTS7960 H-bridge drivers
+- 20 kHz PWM @ 12-bit (4096 steps)
+- Slew-rate limiting (200 ms ramp — configurable)
+- Emergency stop bypasses ramping for instant stop
+- Per-motor direction inversion via Kconfig
 
 ### 6. PWM Driver (`pwm_ledc.c`)
 
-**ESP32 LEDC Peripheral**:
-- Low-speed mode (more channels)
-- Timer 0 shared by all channels
-- 4 channels total (2 per motor)
-- Configurable frequency and resolution
+- ESP32 LEDC peripheral (low-speed mode)
+- Shared timer for all 4 channels
+- Actual frequency: 80 MHz / 4096 = 19.53 kHz
 
-**Default Settings**:
-- Frequency: 20kHz
-- Resolution: 12-bit (4096 steps)
-- Actual frequency: 80MHz / 4096 = 19.53kHz
+---
 
 ## Data Flow
 
-### Control Frame Flow
-
 ```
-PS3/Serial/HTTP → control_frame_t → Control Manager
-                                            ↓
-                                     Safety Check
-                                            ↓
-                                  Differential Mixer
-                                            ↓
-                                (left_speed, right_speed)
-                                            ↓
-                                      Motor Control
-                                            ↓
-                                        PWM Output
-                                            ↓
-                                      BTS7960 Drivers
-                                            ↓
-                                         Motors
+PS4 / Serial / HTTP
+        │
+        ▼  control_frame_t { throttle, steering, estop, arm, slow_mode }
+  Control Manager
+        │
+        ▼  safety check (armed? estop?)
+   Safety Layer
+        │
+        ▼  (throttle, steering, slow_mode)
+ Differential Mixer
+        │
+        ▼  (left_speed, right_speed) ∈ [-1.0, +1.0]
+  Motor Control
+        │
+        ▼  PWM duty cycles
+   LEDC channels
+        │
+        ▼
+  IBT-2 drivers → Motors
 ```
 
-### Safety Integration
-
-Every control loop iteration:
-1. Check if armed (if not, motors = 0)
-2. Check timeout (if expired, disarm)
-3. Check e-stop (if active, motors = 0)
-4. Update watchdog (reset timeout timer)
-5. Apply control (only if armed and not e-stopped)
-
-## Configuration System
-
-All configuration via Kconfig (`main/Kconfig.projbuild`):
-- Motor GPIO pins
-- PWM frequency and resolution
-- Deadzone, expo, max speed
-- Failsafe timeout
-- WiFi settings
-- Enable/disable control sources
-
-Defaults in `sdkconfig.defaults`.
+---
 
 ## FreeRTOS Tasks
 
 | Task | Priority | Stack | Purpose |
 |------|----------|-------|---------|
-| `control_task` | 5 | 4KB | Main control loop (50Hz) |
-| `serial_task` | 4 | 4KB | Serial input processing |
-| `motor_ramp_task` | 4 | 2KB | Motor ramping (50Hz) |
-| `watchdog_task` | 5 | 2KB | Failsafe timeout monitor |
-| `led_task` | 3 | 2KB | Status LED patterns |
-
-PS3 library manages its own tasks internally.
-
-## Design Decisions
-
-### Why "Owner Lock" Arbitration?
-
-**Alternatives considered**:
-- Fixed priority (PS3 > Serial > HTTP)
-- Voting/averaging
-- Manual source selection
-
-**Chosen**: Owner lock
-
-**Rationale**:
-- Simple and predictable
-- No conflicts or priority wars
-- Natural UX (last input wins)
-- Easy to debug (clear active source)
-
-### Why 20kHz PWM?
-
-- Above audible range (no motor whine)
-- BTS7960 rated to ~25kHz
-- 12-bit resolution = 0.024% steps (very smooth)
-- Trade-off: Higher freq = lower resolution
-- 19.53kHz actual (80MHz / 4096)
-
-### Why Boot Disarmed?
-
-**Safety first**: Never move unexpectedly on power-up.
-
-Alternatives considered:
-- Auto-arm on PS3 connect: Too dangerous
-- Config option: Adds complexity
-- Manual arm: Simple, safe, predictable ✓
-
-## Testing Strategy
-
-### Unit Testing (Future)
-- Mixer math validation
-- Deadzone/expo curves
-- Clamping logic
-
-### Integration Testing
-- Control arbitration switching
-- Failsafe timeout behavior
-- E-stop latching
-
-### Hardware Testing
-- Motor response to inputs
-- PWM frequency measurement
-- Failsafe timing verification
-
-## Future Enhancements
-
-### v2.0 Roadmap
-- Closed-loop speed control (encoders)
-- Battery voltage monitoring
-- Current limiting
-- OTA firmware updates
-- Telemetry logging (SD card)
-- ROS/ROS2 integration
+| `control_task` | 5 | 4 KB | Main control loop (50 Hz) |
+| `serial_task` | 4 | 4 KB | Serial JSON parsing |
+| `motor_ramp_task` | 4 | 2 KB | Motor slew-rate limiter |
+| `ps4_scan` | 2 | 4 KB | One-shot BT inquiry scan at startup |
+| `hidh_event_task` | — | 4 KB | esp_hidh internal event dispatch |
 
 ---
 
-*Last updated: 2025-12-28*
+## Configuration System
+
+All user-tunable parameters are in `firmware/main/Kconfig.projbuild`
+under the `Robot Configuration` menu. Defaults live in `sdkconfig.defaults`.
+
+Key groups:
+
+| Group | Examples |
+|-------|---------|
+| Motor Pins | RPWM, LPWM, R_EN, L_EN per motor |
+| Motor Control | PWM frequency, resolution, ramp rate, invert |
+| Differential Drive | Deadzone, expo, max speed, slow mode factor |
+| Control Sources | Enable/disable PS4, Serial, HTTP |
+| WiFi | SSID, password, AP/STA mode |
+| Safety | Failsafe timeout, status LED pin |
+
+---
+
+## Design Decisions
+
+### No priority between control sources
+
+All three sources (PS4, Serial, HTTP) are peers. The most recently active one
+holds control. This is simple, predictable, and avoids silent conflicts.
+
+### Boot disarmed
+
+Motors never move on power-up regardless of pending inputs or reconnecting
+controllers. The user must explicitly press Options (or send `{"arm": true}`)
+to enable motors.
+
+### 20 kHz PWM
+
+Inaudible (above 20 kHz human hearing threshold), well within the BTS7960's
+25 kHz limit, and 12-bit resolution gives 0.024% speed steps (very smooth).
+See [PWM Tuning](pwm-tuning.md) for details.
+
+### esp_hidh for PS4 (no third-party library)
+
+ESP-IDF v5.x includes a native BT Classic HID host (`esp_hidh`). The PS4
+DualShock 4 is a standard HID device, so no protocol-specific library is
+required. Discovery uses raw BT GAP inquiry.
+
+---
+
+*Last updated: 2026-05-08*
