@@ -39,8 +39,8 @@ jobs:
           firmware/build/track-robot.bin
         retention-days: 30
 
-    # Runs only on pushes to main — keeps a rolling pre-release so the
-    # web flasher always has a real binary to flash even before v1.0.0.
+    # Every merge to main creates/overwrites the 'latest' pre-release so
+    # the web flasher always has a real binary to flash.
     - name: Publish rolling latest release (main only)
       if: github.ref == 'refs/heads/main'
       env:
@@ -55,23 +55,7 @@ jobs:
 
         gh release create latest \
           --title "Latest Build (${DATE})" \
-          --notes "$(cat <<'NOTES'
-Automated rolling build from the `main` branch.
-
-This pre-release is overwritten on every push to `main`.
-For stable, versioned firmware use a tagged release (e.g. `v1.0.0`).
-
-### Flash via web flasher
-https://joachimth.github.io/track-robot-v2/
-
-### Flash manually
-```
-esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
-  --before default_reset --after hard_reset write_flash \
-  0x1000 bootloader.bin 0x8000 partition-table.bin 0x10000 track-robot.bin
-```
-NOTES
-)" \
+          --notes-file .github/latest-release-notes.md \
           --prerelease \
           firmware/build/bootloader/bootloader.bin \
           firmware/build/partition_table/partition-table.bin \
