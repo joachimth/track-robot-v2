@@ -56,7 +56,7 @@ jobs:
         gh release create latest \
           --title "Latest Build (${DATE})" \
           --notes-file .github/latest-release-notes.md \
-          --prerelease \
+          --latest \
           firmware/build/bootloader/bootloader.bin \
           firmware/build/partition_table/partition-table.bin \
           firmware/build/track-robot.bin
