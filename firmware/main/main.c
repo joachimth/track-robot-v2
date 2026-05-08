@@ -34,6 +34,21 @@ static const char *TAG = "main";
 #define CONFIG_ROBOT_MOTOR_INVERT_RIGHT 0
 #endif
 
+#ifdef CONFIG_ROBOT_ENABLE_PS4
+static void ps4_init_task(void *arg) {
+    ESP_LOGI(TAG, "PS4 init task started");
+
+    esp_err_t ret = controller_ps4_init(NULL);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "PS4 controller init failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "PS4 controller init task completed");
+    }
+
+    vTaskDelete(NULL);
+}
+#endif
+
 /**
  * @brief Initialize NVS (Non-Volatile Storage)
  */
@@ -97,16 +112,6 @@ void app_main(void) {
     ESP_LOGI(TAG, "Initializing control manager...");
     ESP_ERROR_CHECK(control_manager_init());
 
-#ifdef CONFIG_ROBOT_ENABLE_PS4
-    // PS4 controller — uses ESP-IDF esp_hidh (BT Classic HID host).
-    // Pass NULL for MAC to use the factory-burned ESP32 Bluetooth address.
-    // The controller auto-scans; press PS+Share on the gamepad to pair.
-    ESP_LOGI(TAG, "Initializing PS4 controller...");
-    ESP_ERROR_CHECK(controller_ps4_init(NULL));
-#else
-    ESP_LOGI(TAG, "PS4 controller disabled in config");
-#endif
-
 #ifdef CONFIG_ROBOT_ENABLE_SERIAL
     // Initialize Serial controller
     ESP_LOGI(TAG, "Initializing Serial controller...");
@@ -116,16 +121,30 @@ void app_main(void) {
 #endif
 
 #ifdef CONFIG_ROBOT_ENABLE_HTTP
-    // Initialize HTTP controller
-    ESP_LOGI(TAG, "Initializing HTTP controller...");
+    // Initialize HTTP controller before PS4 so AP/web UI is always available.
+    ESP_LOGI(TAG, "Initializing HTTP/WiFi controller...");
     ESP_ERROR_CHECK(controller_http_init());
 #else
     ESP_LOGI(TAG, "HTTP controller disabled in config");
 #endif
 
+#ifdef CONFIG_ROBOT_ENABLE_PS4
+    // Run PS4 HID host initialization in a separate task so a BT/HID issue
+    // cannot block WiFi fallback, web UI, serial control, or system heartbeat.
+    ESP_LOGI(TAG, "Starting PS4 controller init task...");
+    BaseType_t ps4_task = xTaskCreate(ps4_init_task, "ps4_init", 6144, NULL, 4, NULL);
+    if (ps4_task != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create PS4 init task");
+    }
+#else
+    ESP_LOGI(TAG, "PS4 controller disabled in config");
+#endif
+
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "  System Ready");
     ESP_LOGI(TAG, "  State: DISARMED (press Options on PS4 to arm)");
+    ESP_LOGI(TAG, "  Fallback AP: TrackRobot-Setup / trackrobot");
+    ESP_LOGI(TAG, "  Web UI: http://192.168.4.1/");
     ESP_LOGI(TAG, "=================================================");
 
     // Main loop - monitor system health
