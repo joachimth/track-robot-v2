@@ -1,7 +1,7 @@
 /**
  * @file main.c
  * @brief Tracked Robot Firmware - Main Application
- * 
+ *
  * Initializes all subsystems and starts control tasks.
  */
 
@@ -20,14 +20,19 @@
 #include "motor_bts7960.h"
 #include "mixer_diffdrive.h"
 #include "safety_failsafe.h"
-#ifdef CONFIG_ROBOT_ENABLE_PS3
-#include "controller_ps3.h"
-#endif
 #ifdef CONFIG_ROBOT_ENABLE_PS4
 #include "controller_ps4.h"
 #endif
 
 static const char *TAG = "main";
+
+// ESP-IDF does not define disabled bool Kconfig symbols - provide 0 fallbacks
+#ifndef CONFIG_ROBOT_MOTOR_INVERT_LEFT
+#define CONFIG_ROBOT_MOTOR_INVERT_LEFT 0
+#endif
+#ifndef CONFIG_ROBOT_MOTOR_INVERT_RIGHT
+#define CONFIG_ROBOT_MOTOR_INVERT_RIGHT 0
+#endif
 
 /**
  * @brief Initialize NVS (Non-Volatile Storage)
@@ -49,7 +54,7 @@ static void init_nvs(void) {
 void app_main(void) {
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "  Tracked Robot Firmware v0.1.0");
-    ESP_LOGI(TAG, "  ESP32-WROOM-32 | IBT-2 (BTS7960) | PS3/PS4");
+    ESP_LOGI(TAG, "  ESP32-WROOM-32 | IBT-2 (BTS7960) | PS4");
     ESP_LOGI(TAG, "=================================================");
 
     // Initialize NVS
@@ -73,7 +78,7 @@ void app_main(void) {
         .pwm_freq_hz = CONFIG_ROBOT_MOTOR_PWM_FREQ_HZ,
         .pwm_resolution = CONFIG_ROBOT_MOTOR_PWM_RESOLUTION,
         .ramp_rate_ms = CONFIG_ROBOT_MOTOR_RAMP_RATE_MS,
-        .invert_left = CONFIG_ROBOT_MOTOR_INVERT_LEFT,
+        .invert_left  = CONFIG_ROBOT_MOTOR_INVERT_LEFT,
         .invert_right = CONFIG_ROBOT_MOTOR_INVERT_RIGHT,
     };
     ESP_ERROR_CHECK(motor_bts7960_init(&motor_cfg));
@@ -92,27 +97,12 @@ void app_main(void) {
     ESP_LOGI(TAG, "Initializing control manager...");
     ESP_ERROR_CHECK(control_manager_init());
 
-#ifdef CONFIG_ROBOT_ENABLE_PS3
-    // Initialize PS3 controller
-    ESP_LOGI(TAG, "Initializing PS3 controller...");
-    // Set the Bluetooth MAC address the PS3 controller will pair to.
-    // Run idf.py monitor, note the BT MAC printed at boot, then update here.
-    uint8_t ps3_mac[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-    ESP_LOGW(TAG, "*** SET YOUR ESP32 BT MAC IN main.c (currently placeholder) ***");
-    ESP_LOGW(TAG, "Current MAC: %02X:%02X:%02X:%02X:%02X:%02X",
-             ps3_mac[0], ps3_mac[1], ps3_mac[2],
-             ps3_mac[3], ps3_mac[4], ps3_mac[5]);
-    ESP_ERROR_CHECK(controller_ps3_init(ps3_mac));
-#else
-    ESP_LOGI(TAG, "PS3 controller disabled in config");
-#endif
-
 #ifdef CONFIG_ROBOT_ENABLE_PS4
-    // Initialize PS4 controller
+    // PS4 controller — uses ESP-IDF esp_hidh (BT Classic HID host).
+    // Pass NULL for MAC to use the factory-burned ESP32 Bluetooth address.
+    // The controller auto-scans; press PS+Share on the gamepad to pair.
     ESP_LOGI(TAG, "Initializing PS4 controller...");
-    uint8_t ps4_mac[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-    ESP_LOGW(TAG, "*** SET YOUR ESP32 BT MAC IN main.c for PS4 ***");
-    ESP_ERROR_CHECK(controller_ps4_init(ps4_mac));
+    ESP_ERROR_CHECK(controller_ps4_init(NULL));
 #else
     ESP_LOGI(TAG, "PS4 controller disabled in config");
 #endif
@@ -135,7 +125,7 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "  System Ready");
-    ESP_LOGI(TAG, "  State: DISARMED (press START to arm)");
+    ESP_LOGI(TAG, "  State: DISARMED (press Options on PS4 to arm)");
     ESP_LOGI(TAG, "=================================================");
 
     // Main loop - monitor system health

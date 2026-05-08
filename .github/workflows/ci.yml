@@ -6,30 +6,28 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    
-    - name: Setup ESP-IDF
+
+    - name: Build firmware
       uses: espressif/esp-idf-ci-action@v1
       with:
         esp_idf_version: v5.1.2
         target: esp32
-    
-    - name: Build firmware
-      working-directory: firmware
-      run: |
-        . $IDF_PATH/export.sh
-        idf.py build
-    
+        path: firmware
+
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: firmware-binaries
         path: |
