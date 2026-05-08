@@ -7,8 +7,13 @@ cmake_minimum_required(VERSION 3.16)
 set(BLUEPAD32_ROOT "${CMAKE_BINARY_DIR}/_deps/bluepad32")
 set(BLUEPAD32_REPO "https://github.com/ricardoquesada/bluepad32.git")
 set(BLUEPAD32_BRANCH "main")
+set(BLUEPAD32_SRC "${BLUEPAD32_ROOT}/src")
+set(BLUEPAD32_COMPONENTS "${BLUEPAD32_SRC}/components")
+set(BTSTACK_ROOT "${BLUEPAD32_ROOT}/external/btstack")
+set(BTSTACK_ESP32_PORT "${BTSTACK_ROOT}/port/esp32")
+set(BTSTACK_COMPONENT_DIR "${BLUEPAD32_COMPONENTS}/btstack")
 
-if(NOT EXISTS "${BLUEPAD32_ROOT}/src/components/bluepad32/CMakeLists.txt")
+if(NOT EXISTS "${BLUEPAD32_COMPONENTS}/bluepad32/CMakeLists.txt")
     message(STATUS "Fetching Bluepad32 from ${BLUEPAD32_REPO}")
     execute_process(
         COMMAND git clone --depth 1 --branch ${BLUEPAD32_BRANCH} --recurse-submodules --shallow-submodules ${BLUEPAD32_REPO} ${BLUEPAD32_ROOT}
@@ -19,16 +24,14 @@ if(NOT EXISTS "${BLUEPAD32_ROOT}/src/components/bluepad32/CMakeLists.txt")
     endif()
 endif()
 
-set(BTSTACK_ROOT "${BLUEPAD32_ROOT}/external/btstack")
-set(BTSTACK_ESP32_PORT "${BTSTACK_ROOT}/port/esp32")
-set(BTSTACK_COMPONENT_DIR "${BTSTACK_ESP32_PORT}/components/btstack")
-
 # Bluepad32 requires BTstack to be generated/installed as an ESP-IDF component.
-# Upstream recommends running external/btstack/port/esp32/integrate_btstack.py.
+# Upstream recommends:
+#   IDF_PATH=${BLUEPAD32}/src ./integrate_btstack.py
+# This installs the component into ${BLUEPAD32}/src/components/btstack.
 if(NOT EXISTS "${BTSTACK_COMPONENT_DIR}/CMakeLists.txt")
-    message(STATUS "Integrating BTstack ESP-IDF component")
+    message(STATUS "Integrating BTstack ESP-IDF component into Bluepad32 source tree")
     execute_process(
-        COMMAND python3 integrate_btstack.py
+        COMMAND ${CMAKE_COMMAND} -E env IDF_PATH=${BLUEPAD32_SRC} python3 integrate_btstack.py
         WORKING_DIRECTORY ${BTSTACK_ESP32_PORT}
         RESULT_VARIABLE BTSTACK_INTEGRATE_RESULT
     )
@@ -39,8 +42,7 @@ endif()
 
 # Project components + Bluepad32 / BTstack components
 set(EXTRA_COMPONENT_DIRS
-    "${BLUEPAD32_ROOT}/src/components"
-    "${BTSTACK_ESP32_PORT}/components"
+    "${BLUEPAD32_COMPONENTS}"
     "components/ps4"
     "components/control"
     "components/motor"
