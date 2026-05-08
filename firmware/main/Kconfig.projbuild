@@ -105,13 +105,13 @@ menu "Robot Configuration"
 
         config ROBOT_MOTOR_PWM_RESOLUTION
             int "PWM resolution (bits)"
-            default 12
+            default 11
             range 8 14
             help
                 PWM duty cycle resolution.
-                12-bit = 4096 steps (0.024% resolution)
-                Formula: actual_freq = 80MHz / (2^resolution)
-                At 12-bit: 80MHz / 4096 = 19.53kHz
+                11-bit = 2048 steps (0.049% resolution), which is more than enough
+                for DC motor control while allowing reliable 20kHz PWM on ESP32.
+                Trade-off: Higher frequency = lower resolution.
 
         config ROBOT_MOTOR_RAMP_RATE_MS
             int "Motor ramp rate (ms per 100% change)"
