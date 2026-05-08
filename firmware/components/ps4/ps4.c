@@ -2,17 +2,12 @@
  * @file ps4.c
  * @brief PS4 DualShock 4 controller driver using ESP-IDF esp_hidh
  *
- * BT Classic HID input report layout (report ID 0x01, offsets after ID byte):
- *   [0]  Left stick X      (0-255, centre=128)
- *   [1]  Left stick Y      (0-255, centre=128, up=0)
- *   [2]  Right stick X
- *   [3]  Right stick Y
- *   [4]  Buttons 1: lo nibble=D-pad, bit4=Square, bit5=Cross, bit6=Circle, bit7=Triangle
- *   [5]  Buttons 2: bit0=L1, bit1=R1, bit2=L2, bit3=R2, bit4=Share, bit5=Options, bit6=L3, bit7=R3
- *   [6]  Buttons 3: bit0=PS, bit1=Touchpad click
- *
- * Discovery uses the raw BT GAP API (esp_gap_bt_api.h) rather than the
- * private esp_hid_gap.h header, which is not exported as a public IDF API.
+ * Maps gamepad state to control_frame_t:
+ *   Left stick Y (inverted) -> throttle
+ *   Left stick X            -> steering
+ *   Options                 -> arm
+ *   Cross                   -> emergency stop
+ *   L1                      -> slow mode
  */
 
 #include "ps4.h"
@@ -214,16 +209,18 @@ esp_err_t ps4_init(const uint8_t *host_mac, ps4_callback_t callback) {
         }
     }
 
-    // BT controller
+    // BT controller. The firmware is configured for BTDM in sdkconfig.defaults;
+    // enabling BTDM keeps Classic HID available for PS4 while avoiding
+    // ESP_ERR_INVALID_ARG on builds where CLASSIC-only enable is not accepted.
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "BT controller init: %s", esp_err_to_name(ret));
         return ret;
     }
-    ret = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
+    ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "BT controller enable: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "BT controller enable BTDM: %s", esp_err_to_name(ret));
         return ret;
     }
 
