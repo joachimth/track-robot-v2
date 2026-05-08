@@ -5,64 +5,79 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tracked Robot Firmware Flasher</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- esp-web-tools handles the full ESP32 flash protocol -->
+    <script type="module" src="https://unpkg.com/esp-web-tools@9/dist/web/install-button.js?module"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🤖 Tracked Robot Firmware Flasher</h1>
-            <p class="subtitle">Flash firmware directly from your browser</p>
+            <h1>&#x1F916; Tracked Robot Firmware Flasher</h1>
+            <p class="subtitle">Flash firmware directly from your browser via USB</p>
         </header>
 
         <main>
             <div class="card">
                 <h2>Requirements</h2>
                 <ul class="requirements">
-                    <li>✓ Chrome, Edge, or Opera browser</li>
-                    <li>✓ ESP32 DevKitC connected via USB</li>
-                    <li>✓ No drivers needed</li>
+                    <li>&#10003; Chrome or Edge browser (Web Serial API)</li>
+                    <li>&#10003; ESP32-WROOM-32 connected via USB</li>
+                    <li>&#10003; No extra drivers needed on most systems</li>
                 </ul>
             </div>
 
-            <div class="card status-card">
-                <h2>Status</h2>
-                <div id="status" class="status">
-                    <div class="status-icon">⚪</div>
-                    <span id="statusText">Not connected</span>
+            <div class="card flash-card">
+                <h2>Flash Latest Firmware</h2>
+                <div id="version-banner" class="version-banner loading">
+                    Checking for latest release&hellip;
                 </div>
-                <div id="progress-container" class="progress-container" style="display: none;">
-                    <div class="progress-bar">
-                        <div id="progress" class="progress-fill"></div>
-                    </div>
-                    <div id="progressText" class="progress-text">0%</div>
+                <div class="flash-action">
+                    <esp-web-install-button manifest="manifest.json" id="install-btn">
+                        <button slot="activate" class="btn btn-primary btn-large">
+                            &#x26A1; Connect &amp; Flash
+                        </button>
+                        <span slot="unsupported" class="unsupported-msg">
+                            &#x26A0;&#xFE0F; Web Serial is not supported in this browser.<br>
+                            Please use <strong>Chrome</strong> or <strong>Edge</strong>.
+                        </span>
+                    </esp-web-install-button>
                 </div>
+                <p class="flash-hint">
+                    Click the button, select your ESP32 port, and the flasher handles the rest.
+                </p>
             </div>
 
             <div class="card">
-                <h2>Instructions</h2>
+                <h2>&#x1F4DD; Manual Flash (esptool)</h2>
+                <p>Download binaries from
+                    <a href="https://github.com/joachimth/track-robot-v2/releases/latest"
+                       target="_blank">GitHub Releases</a>, then:
+                </p>
+                <pre class="code-block">esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
+  --before default_reset --after hard_reset write_flash \
+  0x1000  bootloader.bin \
+  0x8000  partition-table.bin \
+  0x10000 track-robot.bin</pre>
+            </div>
+
+            <div class="card">
+                <h2>&#x1F3AE; After Flashing</h2>
                 <ol class="instructions">
-                    <li>Click <strong>"Connect"</strong> button</li>
-                    <li>Select your ESP32 port from the browser dialog</li>
-                    <li>Click <strong>"Flash Firmware"</strong> button</li>
-                    <li>Wait for flashing to complete (~30 seconds)</li>
-                    <li>ESP32 will automatically reset</li>
+                    <li>Open a serial monitor at <strong>115200 baud</strong> and verify boot messages</li>
+                    <li>Hold <strong>PS + Share</strong> on the PS4 controller to enter pairing mode</li>
+                    <li>The ESP32 scans ~10 s — it connects automatically when the controller is found</li>
+                    <li>Press <strong>Options</strong> on the controller to arm the motors</li>
+                    <li>Drive with the left stick — <strong>Cross</strong> for emergency stop</li>
                 </ol>
-            </div>
-
-            <div class="card actions-card">
-                <button id="connectBtn" class="btn btn-primary">Connect</button>
-                <button id="flashBtn" class="btn btn-success" disabled>Flash Firmware</button>
-                <button id="disconnectBtn" class="btn btn-secondary" disabled>Disconnect</button>
-            </div>
-
-            <div class="card log-card">
-                <h3>Log</h3>
-                <div id="log" class="log"></div>
             </div>
         </main>
 
         <footer>
-            <p>Powered by <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank">Web Serial API</a></p>
-            <p><a href="https://github.com/joachimth/track-robot-v2" target="_blank">View on GitHub</a></p>
+            <p>
+                <a href="https://github.com/joachimth/track-robot-v2" target="_blank">View on GitHub</a>
+                &nbsp;&bull;&nbsp;
+                <a href="https://github.com/joachimth/track-robot-v2/releases" target="_blank">All Releases</a>
+            </p>
+            <p class="footer-note">Powered by <a href="https://esphome.github.io/esp-web-tools/" target="_blank">esp-web-tools</a></p>
         </footer>
     </div>
 

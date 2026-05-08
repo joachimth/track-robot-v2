@@ -16,6 +16,7 @@ body {
     margin: 0 auto;
 }
 
+/* ---- Header ---- */
 header {
     text-align: center;
     color: white;
@@ -32,6 +33,7 @@ header h1 {
     opacity: 0.9;
 }
 
+/* ---- Cards ---- */
 .card {
     background: white;
     border-radius: 12px;
@@ -43,93 +45,78 @@ header h1 {
 .card h2 {
     color: #333;
     margin-bottom: 16px;
-    font-size: 1.5em;
+    font-size: 1.4em;
 }
 
-.card h3 {
-    color: #555;
-    margin-bottom: 12px;
-    font-size: 1.2em;
-}
-
-.requirements, .instructions {
-    list-style-position: inside;
-    color: #555;
-    line-height: 1.8;
-}
-
-.requirements li {
-    list-style: none;
-    padding-left: 24px;
-}
-
-.instructions li {
-    margin-bottom: 8px;
-}
-
-.status {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 1.2em;
-    color: #555;
-}
-
-.status-icon {
-    font-size: 1.5em;
-}
-
-.status.connected .status-icon {
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-.progress-container {
-    margin-top: 16px;
-}
-
-.progress-bar {
-    width: 100%;
-    height: 24px;
-    background: #e0e0e0;
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-    width: 0%;
-    transition: width 0.3s ease;
-}
-
-.progress-text {
-    text-align: center;
-    margin-top: 8px;
-    font-weight: bold;
-    color: #555;
-}
-
-.actions-card {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.btn {
-    flex: 1;
-    min-width: 120px;
-    padding: 14px 28px;
-    font-size: 1em;
+/* ---- Version banner ---- */
+.version-banner {
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
     font-weight: 600;
+    font-size: 1em;
+}
+
+.version-banner.loading {
+    background: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.version-banner.ready {
+    background: #f0fff4;
+    color: #276749;
+    border: 1px solid #9ae6b4;
+}
+
+.version-banner.no-release {
+    background: #fffbeb;
+    color: #744210;
+    border: 1px solid #f6e05e;
+}
+
+.version-banner.no-release a {
+    color: #744210;
+}
+
+.version-banner.error {
+    background: #fff5f5;
+    color: #742a2a;
+}
+
+/* ---- Flash action ---- */
+.flash-action {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.unsupported-msg {
+    display: block;
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    border-radius: 8px;
+    padding: 16px;
+    color: #742a2a;
+    text-align: center;
+    line-height: 1.6;
+}
+
+.flash-hint {
+    text-align: center;
+    color: #718096;
+    font-size: 0.9em;
+}
+
+/* ---- Buttons ---- */
+.btn {
+    padding: 14px 32px;
+    font-size: 1.1em;
+    font-weight: 700;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    line-height: 1;
 }
 
 .btn:disabled {
@@ -145,71 +132,72 @@ header h1 {
 .btn-primary:hover:not(:disabled) {
     background: #5568d3;
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
 }
 
-.btn-success {
-    background: #48bb78;
-    color: white;
+.btn-large {
+    padding: 18px 48px;
+    font-size: 1.2em;
+    border-radius: 10px;
 }
 
-.btn-success:hover:not(:disabled) {
-    background: #38a169;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(72, 187, 120, 0.4);
+/* ---- Lists ---- */
+.requirements {
+    list-style: none;
+    color: #555;
+    line-height: 2;
 }
 
-.btn-secondary {
-    background: #718096;
-    color: white;
+.instructions {
+    list-style-position: inside;
+    color: #555;
+    line-height: 2;
 }
 
-.btn-secondary:hover:not(:disabled) {
-    background: #4a5568;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(113, 128, 150, 0.4);
+.instructions li {
+    margin-bottom: 4px;
+    padding-left: 4px;
 }
 
-.log {
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
+/* ---- Code block ---- */
+.code-block {
+    background: #1a202c;
+    color: #e2e8f0;
     border-radius: 8px;
     padding: 16px;
-    max-height: 300px;
-    overflow-y: auto;
-    font-family: 'Courier New', monospace;
-    font-size: 0.9em;
-    color: #2d3748;
+    margin-top: 12px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.85em;
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre;
 }
 
-.log-entry {
-    margin-bottom: 4px;
-    padding: 4px;
+.card > p {
+    color: #555;
+    line-height: 1.6;
 }
 
-.log-entry.info {
-    color: #2b6cb0;
+.card > p a {
+    color: #667eea;
+    text-decoration: none;
 }
 
-.log-entry.success {
-    color: #2f855a;
-    font-weight: bold;
+.card > p a:hover {
+    text-decoration: underline;
 }
 
-.log-entry.error {
-    color: #c53030;
-    font-weight: bold;
-}
-
+/* ---- Footer ---- */
 footer {
     text-align: center;
     color: white;
     margin-top: 40px;
-    opacity: 0.9;
+    padding-bottom: 20px;
 }
 
 footer p {
     margin-bottom: 8px;
+    opacity: 0.9;
 }
 
 footer a {
@@ -217,20 +205,23 @@ footer a {
     text-decoration: underline;
 }
 
+.footer-note {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+/* ---- Responsive ---- */
 @media (max-width: 600px) {
     header h1 {
         font-size: 1.8em;
     }
-    
+
     .subtitle {
         font-size: 1em;
     }
-    
-    .actions-card {
-        flex-direction: column;
-    }
-    
-    .btn {
-        min-width: 100%;
+
+    .btn-large {
+        padding: 16px 32px;
+        font-size: 1.1em;
     }
 }
