@@ -1,155 +1,170 @@
-# BTS7960 Wiring Guide
+# IBT-2 / BTS7960 Wiring Guide
 
-Complete wiring guide for connecting BTS7960 motor drivers to ESP32 and motors.
+Complete wiring guide for connecting IBT-2 (BTS7960) motor drivers to the ESP32 and motors.
 
 ## BTS7960 Overview
 
-**Specifications**:
-- Max current: 43A continuous
-- Operating voltage: 5.5V - 27V
-- Logic voltage: 3.3V - 5V compatible
-- PWM frequency: Up to ~25kHz
+| Specification | Value |
+|--------------|-------|
+| Max current | 43 A continuous |
+| Operating voltage | 5.5 V – 27 V |
+| Logic voltage | 3.3 V / 5 V compatible |
+| PWM frequency | Up to ~25 kHz |
 
-**Pins**:
-- **RPWM**: Reverse PWM input (3.3V logic)
-- **LPWM**: Forward PWM input (3.3V logic)
-- **R_EN**: Reverse enable (3.3V logic, active high)
-- **L_EN**: Forward enable (3.3V logic, active high)
-- **R_IS**: Reverse current sense (optional, not used)
-- **L_IS**: Forward current sense (optional, not used)
-- **VCC**: Logic power (5V)
-- **GND**: Logic ground
-- **M+**: Motor positive
-- **M-**: Motor negative
-- **B+**: Battery positive (12V)
-- **B-**: Battery negative
+**Pin functions**:
 
-## Wiring Diagram
+| Pin | Direction | Description |
+|-----|-----------|-------------|
+| RPWM | Input | Reverse (backward) PWM |
+| LPWM | Input | Forward PWM |
+| R_EN | Input | Reverse half-bridge enable (active high) |
+| L_EN | Input | Forward half-bridge enable (active high) |
+| R_IS | Output | Reverse current sense (ADC, optional) |
+| L_IS | Output | Forward current sense (ADC, optional) |
+| VCC | Power | Logic supply 5 V |
+| GND | Power | Logic ground |
+| B+ | Power | Battery positive (12 V) |
+| B- | Power | Battery negative |
+| M+ | Motor | Motor terminal positive |
+| M- | Motor | Motor terminal negative |
 
-### Left Motor (BTS7960 #1)
+---
 
-```
-ESP32 DevKitC          BTS7960 #1            Motor Left
-┌─────────────┐       ┌───────────┐         ┌──────────┐
-│             │       │           │         │          │
-│ GPIO 25 ────┼──────→│ RPWM      │         │          │
-│ GPIO 26 ────┼──────→│ LPWM      │         │          │
-│ GPIO 32 ────┼──────→│ R_EN      │         │          │
-│ GPIO 33 ────┼──────→│ L_EN      │         │          │
-│             │       │           │         │          │
-│ 5V ─────────┼──────→│ VCC       │         │          │
-│ GND ────────┼──────→│ GND       │         │          │
-│             │       │           │         │          │
-│             │       │ M+ ───────┼────────→│ +        │
-│             │       │ M- ───────┼────────→│ -        │
-│             │       │           │         │          │
-│             │       │ B+ ←──────┼─────12V Battery    │
-│             │       │ B- ←──────┼─────GND            │
-└─────────────┘       └───────────┘         └──────────┘
-```
+## Wiring Diagrams
 
-### Right Motor (BTS7960 #2)
+### Left Motor — IBT-2 #1 (Track A)
 
 ```
-ESP32 DevKitC          BTS7960 #2            Motor Right
-┌─────────────┐       ┌───────────┐         ┌──────────┐
-│             │       │           │         │          │
-│ GPIO 27 ────┼──────→│ RPWM      │         │          │
-│ GPIO 14 ────┼──────→│ LPWM      │         │          │
-│ GPIO 12 ────┼──────→│ R_EN      │         │          │
-│ GPIO 13 ────┼──────→│ L_EN      │         │          │
-│             │       │           │         │          │
-│ 5V ─────────┼──────→│ VCC       │         │          │
-│ GND ────────┼──────→│ GND       │         │          │
-│             │       │           │         │          │
-│             │       │ M+ ───────┼────────→│ +        │
-│             │       │ M- ───────┼────────→│ -        │
-│             │       │           │         │          │
-│             │       │ B+ ←──────┼─────12V Battery    │
-│             │       │ B- ←──────┼─────GND            │
-└─────────────┘       └───────────┘         └──────────┘
+ESP32-WROOM-32         IBT-2 #1               Motor Left
+┌──────────────┐      ┌──────────┐           ┌──────────┐
+│              │      │          │           │          │
+│  GPIO 27 ───────→  RPWM       │           │          │
+│  GPIO 14 ───────→  LPWM       │           │          │
+│  GPIO 25 ───────→  R_EN       │           │          │
+│  GPIO 26 ───────→  L_EN       │           │          │
+│              │      │          │           │          │
+│  GPIO 34 ←───────  R_IS  (optional ADC)   │          │
+│  GPIO 35 ←───────  L_IS  (optional ADC)   │          │
+│              │      │          │           │          │
+│  5V ─────────────→  VCC        │           │          │
+│  GND ────────────→  GND        │           │          │
+│              │      │          │           │          │
+│              │      │  M+ ──────────────→  +         │
+│              │      │  M- ──────────────→  -         │
+│              │      │          │           │          │
+│              │      │  B+ ←── 12 V Battery           │
+│              │      │  B- ←── Battery GND            │
+└──────────────┘      └──────────┘           └──────────┘
 ```
+
+### Right Motor — IBT-2 #2 (Track B)
+
+```
+ESP32-WROOM-32         IBT-2 #2               Motor Right
+┌──────────────┐      ┌──────────┐           ┌──────────┐
+│              │      │          │           │          │
+│  GPIO 18 ───────→  RPWM       │           │          │
+│  GPIO 19 ───────→  LPWM       │           │          │
+│  GPIO 33 ───────→  R_EN       │           │          │
+│  GPIO 32 ───────→  L_EN       │           │          │
+│              │      │          │           │          │
+│  GPIO 36 ←───────  R_IS  (optional ADC)   │          │
+│  GPIO 39 ←───────  L_IS  (optional ADC)   │          │
+│              │      │          │           │          │
+│  5V ─────────────→  VCC        │           │          │
+│  GND ────────────→  GND        │           │          │
+│              │      │          │           │          │
+│              │      │  M+ ──────────────→  +         │
+│              │      │  M- ──────────────→  -         │
+│              │      │          │           │          │
+│              │      │  B+ ←── 12 V Battery           │
+│              │      │  B- ←── Battery GND            │
+└──────────────┘      └──────────┘           └──────────┘
+```
+
+---
 
 ## Power Distribution
 
 ```
-Milwaukee 12V Battery
+Milwaukee 12 V Battery
     │
-    ├─── BTS7960 #1 B+
-    ├─── BTS7960 #2 B+
+    ├── IBT-2 #1 B+  (motor power left)
+    ├── IBT-2 #2 B+  (motor power right)
     │
-    └─── Buck Converter Input (12V)
-             │
-             └─── Buck Converter Output (5V)
-                      │
-                      ├─── ESP32 VIN (or 5V pin)
-                      ├─── BTS7960 #1 VCC
-                      └─── BTS7960 #2 VCC
+    └── Buck Converter input (12 V)
+              │
+              └── Buck Converter output (5 V)
+                        ├── ESP32 VIN
+                        ├── IBT-2 #1 VCC
+                        └── IBT-2 #2 VCC
 ```
 
-## Critical: Common Ground
+---
 
-**⚠️ ALL GROUNDS MUST BE CONNECTED**:
-- Battery negative (GND)
-- ESP32 GND
-- BTS7960 #1 GND (logic)
-- BTS7960 #1 B- (power)
-- BTS7960 #2 GND (logic)
-- BTS7960 #2 B- (power)
-- Buck converter GND
+## ★ Critical: Common Ground
 
-**Failure to connect common ground will result in**:
-- Erratic motor behavior
-- Damaged components
-- ESP32 crashes
-- Communication failures
+**ALL grounds must be tied together at a single point:**
 
-## Pin Mapping Table
+| Connection | Why |
+|-----------|-----|
+| Battery negative | Reference for all voltages |
+| ESP32 GND | Logic reference |
+| IBT-2 #1 GND | Logic reference |
+| IBT-2 #1 B- | Motor power return |
+| IBT-2 #2 GND | Logic reference |
+| IBT-2 #2 B- | Motor power return |
+| Buck converter GND | Logic supply return |
 
-| ESP32 GPIO | Function | BTS7960 Left | BTS7960 Right |
-|------------|----------|--------------|---------------|
-| 25 | RPWM | RPWM | — |
-| 26 | LPWM | LPWM | — |
-| 32 | R_EN | R_EN | — |
-| 33 | L_EN | L_EN | — |
-| 27 | RPWM | — | RPWM |
-| 14 | LPWM | — | LPWM |
-| 12 | R_EN | — | R_EN |
-| 13 | L_EN | — | L_EN |
-| 5V | Logic Power | VCC | VCC |
-| GND | Ground | GND + B- | GND + B- |
+> **Failing to connect a common ground causes**: erratic motor behaviour,
+> ESP32 crashes, damaged I/O pins, and communication failures.
+
+---
+
+## Complete Pin Reference
+
+| ESP32 GPIO | Signal | IBT-2 Left | IBT-2 Right | Notes |
+|-----------|--------|------------|-------------|-------|
+| 27 | RPWM | RPWM | — | Left backward PWM |
+| 14 | LPWM | LPWM | — | Left forward PWM |
+| 25 | R_EN | R_EN | — | Left reverse enable |
+| 26 | L_EN | L_EN | — | Left forward enable |
+| 18 | RPWM | — | RPWM | Right backward PWM |
+| 19 | LPWM | — | LPWM | Right forward PWM |
+| 33 | R_EN | — | R_EN | Right reverse enable |
+| 32 | L_EN | — | L_EN | Right forward enable |
+| 34 | ADC | R_IS | — | Left current sense (input only) |
+| 35 | ADC | L_IS | — | Left current sense (input only) |
+| 36 | ADC | — | R_IS | Right current sense (input only) |
+| 39 | ADC | — | L_IS | Right current sense (input only) |
+| 2 | GPIO | — | — | Status LED |
+| 5V | VCC | VCC | VCC | Logic power |
+| GND | GND | GND + B- | GND + B- | Common ground |
+
+> **Note**: GPIO 34, 35, 36, 39 are input-only pins on the ESP32-WROOM-32.
+> Current sense is wired but not yet used in firmware v0.1.0.
+
+---
 
 ## Safety Recommendations
 
-1. **Physical E-Stop**: Install a physical switch on battery positive
-2. **Fusing**: Add 50A fuse on battery positive line
-3. **Current Limiting**: Consider 30A fuse per motor
-4. **Wire Gauge**: Use 12AWG or thicker for motor power
-5. **Heatsinking**: Attach heatsinks to BTS7960 if continuous use
-6. **Ventilation**: Ensure airflow around drivers
+1. Install a physical e-stop switch on the battery positive line
+2. Fuse the battery line (50 A main fuse, 30 A per motor branch)
+3. Use 12 AWG or thicker wire for motor power
+4. Attach heatsinks to IBT-2 modules for sustained operation
+5. Ensure airflow around drivers
+
+---
 
 ## Troubleshooting
 
-### Motors Don't Move
-- Check enable pins (R_EN, L_EN) are HIGH
-- Verify 12V power to B+ on BTS7960
-- Check motor connections (M+, M-)
-- Verify PWM signals with oscilloscope
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Motors don't move | Enable pins not high | Check R_EN / L_EN wiring |
+| Motors move wrong direction | RPWM / LPWM swapped | Swap wires, or use `invert_*` Kconfig option |
+| Only one direction works | One PWM pin disconnected | Check RPWM and LPWM continuity |
+| Erratic motion | Missing common ground | Connect all GNDs to single point |
+| IBT-2 overheating | Excessive duty cycle or stall | Add heatsink; check for motor stall |
+| ESP32 resets under load | Insufficient logic power | Verify buck converter output is stable 5 V |
 
-### One Direction Works, Other Doesn't
-- Check RPWM vs LPWM wiring
-- Verify both enable pins connected
-- Test by swapping RPWM/LPWM
-
-### Erratic Behavior
-- ✓ Common ground connected?
-- ✓ Logic power (VCC) stable at 5V?
-- ✓ Signal wires not near motor power wires?
-
-### BTS7960 Overheating
-- Reduce PWM frequency (try 15kHz)
-- Add heatsink
-- Reduce motor current (slow down)
-- Check for motor stall
-
-*Last updated: 2025-12-28*
+*Last updated: 2026-05-08*

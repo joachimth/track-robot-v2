@@ -1,64 +1,66 @@
-# Tracked Robot Car Firmware
+# Tracked Robot Firmware
 
-ESP32-based firmware for a tank-style tracked robot car controlled by PS3 controller, with Serial and HTTP control alternatives.
+ESP32-based firmware for a tank-style tracked robot controlled by a PS4 DualShock 4 controller, with Serial and HTTP fallback control.
 
 ## Features
 
-- **PS3 Controller Support**: Wireless Bluetooth control with full button/stick mapping
-- **Multiple Control Modes**: PS3, Serial (UART), HTTP (Wi-Fi)
-- **High-Performance PWM**: 20kHz motor control for smooth operation
-- **Safety First**: Emergency stop, arming logic, failsafe timeout
-- **Differential Drive**: Intuitive tank-style steering with expo curves
-- **Production Ready**: Full CI/CD, web-based flasher, comprehensive docs
+- **PS4 Controller**: Wireless Bluetooth Classic HID — no third-party library needed
+- **Multiple Control Modes**: PS4, Serial (UART), HTTP (Wi-Fi)
+- **High-Performance PWM**: 20 kHz motor control for smooth, silent operation
+- **Safety First**: Emergency stop, arming logic, 500 ms failsafe timeout
+- **Differential Drive**: Tank-style steering with deadzone, expo curves, slow mode
+- **Production Ready**: CI/CD builds, web-based flasher, comprehensive docs
 
 ## Hardware
 
 ### Components
 
-- **MCU**: ESP32 DevKitC with ESP32-WROVER-IE (8MB Flash, PSRAM)
-- **Motors**: 2× Topran 108 792 windshield wiper motors (12V)
-- **Drivers**: 2× BTS7960 43A Dual H-Bridge modules
-- **Controller**: PS3 wireless controller (Bluetooth)
-- **Power**: Milwaukee 12V battery (4-6Ah)
-- **Buck Converter**: 12V → 5V for ESP32 logic
+| Part | Detail |
+|------|--------|
+| MCU | ESP32-WROOM-32 (4 MB flash) |
+| Motors | 2× Topran 108 792 windshield wiper motors (12 V) |
+| Drivers | 2× IBT-2 / BTS7960 43 A Dual H-Bridge modules |
+| Controller | PS4 DualShock 4 (Bluetooth Classic HID) |
+| Power | Milwaukee 12 V battery (4–6 Ah) |
+| Buck converter | 12 V → 5 V for ESP32 logic |
 
-### Wiring
+### Wiring — ESP32 → IBT-2 Pin Mapping
 
-#### ESP32 → BTS7960 Pin Mapping
+| ESP32 GPIO | Signal | IBT-2 Left (Track A) | IBT-2 Right (Track B) |
+|-----------|--------|----------------------|----------------------|
+| 27 | RPWM | RPWM | — |
+| 14 | LPWM | LPWM | — |
+| 25 | R_EN | R_EN | — |
+| 26 | L_EN | L_EN | — |
+| 18 | RPWM | — | RPWM |
+| 19 | LPWM | — | LPWM |
+| 33 | R_EN | — | R_EN |
+| 32 | L_EN | — | L_EN |
+| 34 | R_IS | R_IS (sense, optional) | — |
+| 35 | L_IS | L_IS (sense, optional) | — |
+| 36 | R_IS | — | R_IS (sense, optional) |
+| 39 | L_IS | — | L_IS (sense, optional) |
+| 2 | LED | Status LED | — |
 
-| Function | ESP32 GPIO | BTS7960 Left | BTS7960 Right |
-|----------|------------|--------------|---------------|
-| RPWM | GPIO 25 | RPWM | — |
-| LPWM | GPIO 26 | LPWM | — |
-| R_EN | GPIO 32 | R_EN | — |
-| L_EN | GPIO 33 | L_EN | — |
-| RPWM | GPIO 27 | — | RPWM |
-| LPWM | GPIO 14 | — | LPWM |
-| R_EN | GPIO 12 | — | R_EN |
-| L_EN | GPIO 13 | — | L_EN |
-| Status LED | GPIO 2 | — | — |
-
-#### Power Wiring
+### Power Wiring
 
 ```
-Milwaukee 12V Battery
-    ├── BTS7960 Left (12V power)
-    ├── BTS7960 Right (12V power)
-    ├── Buck Converter Input (12V)
-    │   └── Buck Converter Output (5V)
-    │       ├── ESP32 VIN (5V)
-    │       └── BTS7960 Logic Power (5V)
-    └── Common Ground ★ CRITICAL ★
-        (Battery GND, ESP32 GND, both BTS7960 GND)
+Milwaukee 12 V Battery
+    ├── IBT-2 Left  B+  (12 V motor power)
+    ├── IBT-2 Right B+  (12 V motor power)
+    └── Buck Converter  (12 V → 5 V)
+             ├── ESP32 VIN
+             ├── IBT-2 Left  VCC
+             └── IBT-2 Right VCC
+
+★ CRITICAL — Common Ground:
+    Battery GND ── ESP32 GND ── IBT-2 Left GND/B- ── IBT-2 Right GND/B-
 ```
 
-**⚠️ GROUNDING**: All grounds MUST be connected together:
-- Battery negative
-- ESP32 GND
-- Both BTS7960 GND pins
-- Buck converter GND
+> **⚠️ Safety**: Add a physical emergency-stop switch in series with the battery positive.
+> The firmware e-stop is NOT a substitute for a hardware switch.
 
-**⚠️ SAFETY**: Add a physical emergency stop switch in series with battery for safety!
+---
 
 ## Quick Start
 
@@ -66,21 +68,18 @@ Milwaukee 12V Battery
 
 #### Option A: Web Flasher (Easiest)
 
-1. Visit: **https://joachimth.github.io/track-robot-v2/**
-2. Click "Connect" and select your ESP32
-3. Click "Flash Firmware"
-4. Wait for completion
+1. Open **https://joachimth.github.io/track-robot-v2/**
+2. Click **Connect** and select your ESP32
+3. Click **Flash Firmware** and wait for completion
 
-*Requires Chrome/Edge browser*
+*Requires Chrome or Edge browser.*
 
 #### Option B: esptool (Manual)
 
 ```bash
-# Install esptool
 pip install esptool
 
-# Download latest release binaries from GitHub Releases
-# Then flash:
+# Download release binaries from GitHub Releases, then:
 esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
   --before default_reset --after hard_reset write_flash \
   0x1000 bootloader.bin \
@@ -92,80 +91,50 @@ esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
 
 ```bash
 # Install ESP-IDF v5.1.2
-# See: https://docs.espressif.com/projects/esp-idf/en/v5.1.2/get-started/
+# https://docs.espressif.com/projects/esp-idf/en/v5.1.2/get-started/
 
-# Clone with submodules
-git clone --recursive https://github.com/joachimth/track-robot-v2.git
+git clone https://github.com/joachimth/track-robot-v2.git
 cd track-robot-v2/firmware
 
-# Configure (optional)
-idf.py menuconfig
-
-# Build and flash
+idf.py menuconfig   # optional — review defaults
 idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-### 2. Pair PS3 Controller
+---
 
-The ESP32 needs the PS3 controller's Bluetooth MAC address:
+### 2. Pair PS4 Controller
 
-#### Get Controller MAC
+Hold **PS + Share** together for ~3 seconds until the light bar flashes rapidly.
 
-**Linux/Mac:**
-```bash
-# Install sixpair
-git clone https://github.com/user-none/sixpair.git
-cd sixpair
-make
+![PS4 pairing: hold PS and Share together](docs/images/ps4-pairing.png)
 
-# Connect controller via USB, then:
-sudo ./sixpair
-# Note the "Current Bluetooth master" address
-```
+The ESP32 scans for ~10 seconds on boot. If pairing fails, reboot and try again.
+After first pairing, press **PS** alone to reconnect on subsequent boots.
 
-**Windows:** Use SCP Toolkit or check controller properties
+See [PS4 Setup Guide](docs/ps4-setup.md) for full instructions and troubleshooting.
 
-#### Set MAC in Firmware
+---
 
-Edit `firmware/main/main.c`:
-```c
-// Replace with your controller's MAC address
-uint8_t ps3_mac[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-```
+### 3. Arm & Drive
 
-Rebuild and flash.
+> **⚠️ Motors are DISARMED at boot for safety.**
 
-#### Connect
+| PS4 Input | Action |
+|-----------|--------|
+| **Options** (≡) | **Arm** system |
+| Left stick Y | Forward / Reverse throttle |
+| Left stick X | Left / Right steering |
+| **Cross** (✕) | **Emergency stop** (latched) |
+| **L1** | Slow mode (50% speed, hold) |
 
-1. Press PS button on controller
-2. Controller should connect (LEDs stabilize)
-3. Check serial monitor for "PS3 connected" message
+Press **Options** to arm → drive with the left stick → press **Cross** for immediate stop.
 
-### 3. Arming & Control
-
-**⚠️ IMPORTANT**: Motors are DISARMED at boot for safety!
-
-**To Arm:**
-- Press **START** button on PS3 controller
-
-**To Drive:**
-- **Left Stick Y-axis**: Forward/Backward throttle
-- **Right Stick X-axis**: Left/Right steering
-- Combine for tank-style driving
-
-**Emergency Stop:**
-- Press **X** button → latches e-stop
-- Press **START** to re-arm
-
-**Slow Mode:**
-- Press **Triangle** to toggle (50% speed limit)
+---
 
 ### 4. Alternative Control Methods
 
-#### Serial Control (UART)
-
-Connect to ESP32 UART (115200 baud, 8N1):
+#### Serial (UART) — 115200 baud 8N1
 
 ```json
 {"throttle": 0.5, "steering": 0.0}
@@ -174,16 +143,14 @@ Connect to ESP32 UART (115200 baud, 8N1):
 {"arm": true}
 ```
 
-Values: -1.0 to +1.0
+Values: −1.0 to +1.0.
 
 #### HTTP API (Wi-Fi)
 
-Default: AP mode, SSID `TrackedRobot`, password `robot123`
-
-**Endpoints:**
+Default: AP mode — SSID `TrackedRobot`, password `robot123`.
 
 ```bash
-# Control
+# Drive
 curl -X POST http://192.168.4.1/control \
   -H "Content-Type: application/json" \
   -d '{"throttle": 0.5, "steering": 0.2}'
@@ -200,46 +167,56 @@ curl http://192.168.4.1/status
 
 Web UI: http://192.168.4.1/
 
+---
+
 ## Configuration
 
-Edit `firmware/sdkconfig.defaults` or run `idf.py menuconfig`:
+Run `idf.py menuconfig` or edit `firmware/sdkconfig.defaults`:
 
-- **Motor pins**: `Component config → Robot Config → Motor Pins`
-- **PWM settings**: `Component config → Robot Config → Motor Control`
-- **Control sources**: `Component config → Robot Config → Control Sources`
-- **Wi-Fi**: `Component config → Robot Config → WiFi Configuration`
+| Setting | Menu path |
+|---------|-----------|
+| Motor GPIO pins | Robot Configuration → Motor Pins |
+| PWM frequency | Robot Configuration → Motor Control |
+| Control sources | Robot Configuration → Control Sources |
+| Wi-Fi SSID / password | Robot Configuration → WiFi Configuration |
+| Failsafe timeout | Robot Configuration → Safety |
+
+---
 
 ## Safety Notes
 
-⚠️ **CRITICAL SAFETY WARNINGS**:
+1. **Test with tracks off the ground first**
+2. **Always have a physical e-stop switch** on the battery line
+3. **Start in slow mode** (hold L1) until familiar with response
+4. **Verify common ground** before powering on
+5. **IBT-2 drivers can supply 43 A** — ensure wiring is rated accordingly
+6. **Firmware e-stop is not a substitute** for a hardware switch
 
-1. **Test with tracks OFF the ground** initially
-2. **Always have physical emergency stop** on battery line
-3. **Start in slow mode** until familiar with response
-4. **Check all wiring** before powering on
-5. **Motors are powerful** (43A drivers, 12V motors)
-6. **Firmware e-stop is NOT a substitute** for physical switch
-7. **Ensure proper grounding** to prevent damage
+---
 
 ## Documentation
 
-- [Architecture Overview](docs/architecture.md)
-- [PWM Frequency Guide](docs/pwm-tuning.md)
-- [BTS7960 Wiring](docs/bts7960-wiring.md)
-- [PS3 Setup](docs/ps3-setup.md)
-- [Serial Protocol](docs/serial-protocol.md)
-- [HTTP API](docs/http-api.md)
-- [Safety & Failsafe](docs/safety-failsafe.md)
-- [CI/CD & Releases](docs/cicd.md)
-- [Web Flasher](docs/web-flasher.md)
+| Doc | Description |
+|-----|-------------|
+| [Architecture](docs/architecture.md) | System design and data flow |
+| [BTS7960 Wiring](docs/bts7960-wiring.md) | Full wiring diagrams |
+| [PS4 Setup](docs/ps4-setup.md) | Controller pairing and button mapping |
+| [Serial Protocol](docs/serial-protocol.md) | UART JSON command format |
+| [HTTP API](docs/http-api.md) | REST endpoint reference |
+| [Safety & Failsafe](docs/safety-failsafe.md) | Arming, e-stop, timeout |
+| [PWM Tuning](docs/pwm-tuning.md) | Frequency and resolution guide |
+| [CI/CD](docs/cicd.md) | Build and release pipeline |
+| [Web Flasher](docs/web-flasher.md) | Browser-based flashing |
+
+---
 
 ## Development
 
-See [CLAUDE.md](CLAUDE.md) for development guidelines and [PROGRESS.md](PROGRESS.md) for current status.
+See [CLAUDE.md](CLAUDE.md) for coding guidelines and [PROGRESS.md](PROGRESS.md) for current status.
 
 ## License
 
-MIT License - see LICENSE file
+MIT — see [LICENSE](LICENSE)
 
 ## Support
 

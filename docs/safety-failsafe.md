@@ -1,127 +1,138 @@
 # Safety and Failsafe System
 
-Safety mechanisms and failsafe behavior.
+Safety mechanisms and failsafe behaviour for the tracked robot firmware.
 
 ## Safety States
 
-### DISARMED (Default)
-- Motors disabled
-- Boot default state
-- Safe for handling
+### DISARMED (boot default)
+- Motors disabled regardless of control input
+- Safe for wiring, handling, and initial setup
 
 ### ARMED
-- Motors enabled
-- Accepts control inputs
-- Requires explicit arming
+- Motors enabled and responsive to control input
+- Entered via **Options** button or `{"arm": true}` over Serial/HTTP
 
 ### ESTOP (Emergency Stop)
-- Latched state
-- Motors immediately stopped
-- Requires re-arm to clear
+- Latched — does NOT automatically clear
+- Motors stop immediately (bypasses slew-rate limiter)
+- Re-arm required via **Options** button or `{"arm": true}`
 
 ## State Transitions
 
 ```
-DISARMED ─────ARM────→ ARMED
-   ↑                     │
-   │                     │
-   └────DISARM───────────┘
-   
-   Any state ──ESTOP──→ ESTOP ──ARM──→ DISARMED
+                        DISARMED  (boot)
+                        │       ↑
+                      [arm]  [timeout / disarm]
+                        │       │
+                        ▼       │
+                         ARMED ──┘
+                           │
+                        [estop]
+                           │
+                           ▼
+                          ESTOP ──[arm]──→ DISARMED
 ```
 
 ## Failsafe Mechanisms
 
 ### 1. Boot Disarmed
-- System always boots in DISARMED state
-- Prevents unexpected movement on power-up
-- Must explicitly arm via START button or API
+The system always starts in DISARMED state. No input, button press,
+or reconnecting controller can cause the motors to move without an explicit
+arm command.
 
-### 2. Watchdog Timeout
-- Monitors control input freshness
-- Timeout: 500ms (configurable)
-- No input for 500ms → Auto-disarm
-- Prevents runaway if controller disconnects
+### 2. Watchdog Timeout (500 ms)
+If no control frame is received for 500 ms (configurable in Kconfig), the
+active source is cleared and motors stop. This covers:
+- PS4 controller going out of range
+- Serial host crash
+- HTTP client timeout
 
 ### 3. Emergency Stop
-- Latched (doesn't auto-clear)
-- Immediate motor stop (bypasses ramping)
-- Requires explicit re-arm
-- Activated by X button or `/estop` API
+Triggered by:
+- **PS4 Cross (✕) button**
+- `POST /estop`
+- `{"estop": true}` over Serial
+
+The stop is **latched** — it does not clear automatically. Press **Options**
+to re-arm after resolving the issue.
 
 ### 4. Control Arbitration
-- Only one source active at a time
-- Timeout reverts to safe stop
-- No priority conflicts
+Only one source is active at a time. Switching sources requires the previous
+source to time out first (natural timeout, no manual override needed).
 
-## Testing Procedures
-
-### Test 1: Boot Disarmed
-1. Power on ESP32
-2. Try moving sticks → Motors should NOT move
-3. Press START → System arms
-4. Move sticks → Motors respond
-
-### Test 2: Watchdog Timeout
-1. Arm system
-2. Move sticks (motors respond)
-3. Release sticks to center
-4. Wait 600ms
-5. System should auto-disarm (motors stop)
-
-### Test 3: Emergency Stop
-1. Arm system
-2. Move sticks (motors respond)
-3. Press X button → Motors stop immediately
-4. Try moving sticks → Motors do NOT respond
-5. Press START → System re-arms
-
-### Test 4: Controller Disconnect
-1. Arm system with PS3
-2. Turn off controller (hold PS button 10s)
-3. Within 600ms, system should auto-disarm
+---
 
 ## LED Status Patterns
 
-| Pattern | Meaning |
-|---------|---------|
-| Fast blink (100ms) | Boot |
-| Slow blink (1s) | Disarmed |
-| Solid ON | Armed |
-| Very fast blink (50ms) | Emergency stop |
+| Pattern | State |
+|---------|-------|
+| Fast blink (100 ms) | Boot initialising |
+| Slow blink (1 s) | Disarmed — waiting for arm |
+| Solid ON | Armed and ready |
+| Very fast blink (50 ms) | Emergency stop active |
+
+---
+
+## Test Procedures
+
+### Test 1 — Boot Disarmed
+1. Power on ESP32
+2. Move left stick → motors must **not** move
+3. Press **Options** → system arms
+4. Move stick → motors respond
+
+### Test 2 — Watchdog Timeout
+1. Arm system (Options)
+2. Move stick (motors running)
+3. Release stick to centre — do **not** send further input
+4. After ~600 ms motors should stop and system disarms
+
+### Test 3 — Emergency Stop
+1. Arm system
+2. Drive with left stick
+3. Press **Cross (✕)** → motors stop instantly
+4. Move stick → motors do **not** respond (e-stop latched)
+5. Press **Options** → system re-arms
+
+### Test 4 — Controller Disconnect
+1. Arm system with PS4 controller
+2. Turn off controller (hold PS button ~10 s)
+3. Within ~600 ms the system should disarm automatically
+
+---
 
 ## Safety Best Practices
 
 ### Before First Power-On
-- ✓ Visual inspection of all wiring
-- ✓ Continuity test (common ground)
-- ✓ Voltage test (buck converter = 5V)
-- ✓ Tracks off the ground
+- Visual inspection of all wiring
+- Continuity test on all GND connections
+- Verify buck converter output is 5.0 V ± 0.25 V
+- Tracks off the ground
 
 ### During Testing
-- ✓ Always test with tracks off ground first
-- ✓ Start in slow mode
-- ✓ Have physical e-stop accessible
-- ✓ Monitor BTS7960 temperature
+- Always test with tracks elevated first
+- Start in slow mode (hold **L1**)
+- Keep physical e-stop within reach
+- Monitor IBT-2 temperature
 
-### In Operation
-- ✓ Never rely solely on firmware e-stop
-- ✓ Physical switch on battery line
-- ✓ Keep firmware e-stop accessible
-- ✓ Monitor battery voltage
+### In Normal Operation
+- Never rely solely on the firmware e-stop
+- Install a physical switch on the battery positive line
+- Monitor battery voltage (add warning in firmware v2.0)
+
+---
 
 ## Known Limitations
 
-1. Firmware failsafe is NOT hardware failsafe
-2. ESP32 crash = motors MAY continue (use physical switch!)
-3. WiFi latency can delay HTTP estop
-4. Bluetooth disconnects may take up to 600ms to detect
+| Limitation | Impact |
+|-----------|--------|
+| Software-only failsafe | ESP32 crash → motors may continue |
+| 500 ms timeout | Latency between disconnect and stop |
+| HTTP latency | Network delay can slow e-stop via Wi-Fi |
+| No battery monitoring | Low-voltage motor stall not detected in v0.1 |
 
-## Recommendations
+> **Mandatory for any field use**: install a physical emergency-stop switch
+> on the battery positive line. The firmware e-stop is a convenience feature,
+> not a safety device.
 
-- Add physical emergency stop switch (mandatory for field use)
-- Fuse battery line (50A recommended)
-- Consider adding current sensors for overcurrent shutdown
-- Monitor battery voltage (add in firmware v2.0)
-
-*Last updated: 2025-12-28*
+*Last updated: 2026-05-08*
