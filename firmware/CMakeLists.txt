@@ -40,7 +40,8 @@ if(NOT EXISTS "${BTSTACK_COMPONENT_DIR}/CMakeLists.txt")
     endif()
 endif()
 
-# Project components + Bluepad32 / BTstack components
+# Project components + Bluepad32 / BTstack components.
+# Explicitly list cmd_* stubs because Bluepad32 depends on ESP-IDF console command components.
 set(EXTRA_COMPONENT_DIRS
     "${BLUEPAD32_COMPONENTS}"
     "components/ps4"
@@ -48,6 +49,8 @@ set(EXTRA_COMPONENT_DIRS
     "components/motor"
     "components/motion"
     "components/safety"
+    "components/cmd_system"
+    "components/cmd_nvs"
 )
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
