@@ -4,9 +4,9 @@ Guide for pairing and using a PS4 DualShock 4 controller with the tracked robot.
 
 ## How It Works
 
-The firmware uses ESP-IDF's built-in Bluetooth Classic HID host (`esp_hidh`).
-No third-party library is needed. On boot the ESP32 runs a ~10-second BT
-inquiry scan — put the controller into pairing mode during this window.
+The firmware uses **Bluepad32** (a third-party gamepad library) running on
+top of **BTstack**. On boot the Bluepad32 backend starts scanning and
+auto-connecting to any gamepad — put the controller into pairing mode to pair.
 
 ## Pairing
 
@@ -17,13 +17,16 @@ Put the controller into **Bluetooth pairing mode** by holding
 
 ![PS4 pairing: hold PS and Share together](images/ps4-pairing.png)
 
-The ESP32 detects any device advertising the name `Wireless Controller`
-and connects automatically. You will see on the serial monitor:
+The ESP32 (via Bluepad32/BTstack) detects any compatible gamepad and connects
+automatically. You will see on the serial monitor:
 
 ```
-I (xxxx) ps4: BT discovery started — press PS+Share on PS4
-I (xxxx) ps4: PS4 found: Wireless Controller — connecting
-I (xxxx) ps4: PS4 controller connected
+I (xxxx) gamepad: Bluepad32 platform init
+I (xxxx) gamepad: Bluepad32 ready
+I (xxxx) gamepad: Starting controller scan / autoconnect
+I (xxxx) gamepad: Discovered device: Wireless Controller RSSI=-60
+I (xxxx) gamepad: Controller connected
+I (xxxx) gamepad: Controller ready
 ```
 
 ### Re-Connecting After Reboot

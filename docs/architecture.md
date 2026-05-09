@@ -59,8 +59,9 @@ All three sources produce a standardized `control_frame_t` and submit it via
 
 #### PS4 Controller (`controller_ps4.c` + `ps4.c`)
 
-- **Transport**: Bluetooth Classic HID (ESP-IDF `esp_hidh`)
-- **Discovery**: BT GAP inquiry scan on boot; connects to "Wireless Controller"
+- **Transport**: Bluetooth Classic (Bluepad32 + BTstack — replaces ESP-IDF `esp_hidh`)
+- **Discovery**: BTstack auto-scan + autoconnect on boot; accepts any gamepad
+- **Pairing**: Hold PS+Share on controller until light bar flashes rapidly
 - **Button mapping**:
   - Left stick Y → throttle (inverted: up = forward)
   - Left stick X → steering
@@ -169,8 +170,7 @@ PS4 / Serial / HTTP
 | `control_task` | 5 | 4 KB | Main control loop (50 Hz) |
 | `serial_task` | 4 | 4 KB | Serial JSON parsing |
 | `motor_ramp_task` | 4 | 2 KB | Motor slew-rate limiter |
-| `ps4_scan` | 2 | 4 KB | One-shot BT inquiry scan at startup |
-| `hidh_event_task` | — | 4 KB | esp_hidh internal event dispatch |
+| `bluepad32` | 5 | 12 KB | Bluepad32/BTstack run loop (replaces ps4_scan + hidh) |
 
 ---
 
@@ -211,12 +211,21 @@ Inaudible (above 20 kHz human hearing threshold), well within the BTS7960's
 25 kHz limit, and 12-bit resolution gives 0.024% speed steps (very smooth).
 See [PWM Tuning](pwm-tuning.md) for details.
 
-### esp_hidh for PS4 (no third-party library)
+### Bluepad32 + BTstack for PS4 (third-party gamepad library)
 
-ESP-IDF v5.x includes a native BT Classic HID host (`esp_hidh`). The PS4
-DualShock 4 is a standard HID device, so no protocol-specific library is
-required. Discovery uses raw BT GAP inquiry.
+The PS4 DualShock 4 backend uses **Bluepad32** on top of **BTstack**, not
+ESP-IDF's native `esp_hidh`. Bluedroid is disabled in `sdkconfig.defaults`.
+
+**Why not esp_hidh?**
+- `esp_hidh` requires manual HID report parsing (byte offsets for each button/axis)
+- Bluepad32 provides a stable, tested gamepad abstraction for DS4, DS5, Xbox, etc.
+- BTstack is more robust than Bluedroid for Classic BT HID gamepads
+
+**Components added for Bluepad32**:
+- `firmware/components/ps4/` — platform adapter + `ps4_gamepad_t` abstraction
+- `firmware/components/cmd_nvs/` — stub required by Bluepad32's build system
+- `firmware/components/cmd_system/` — stub required by Bluepad32's build system
 
 ---
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-09*
