@@ -49,6 +49,10 @@ static int nvs_cfg_int(const char *key, int default_val) {
 
 #ifdef CONFIG_ROBOT_ENABLE_PS4
 static void ps4_init_task(void *arg) {
+    // Delay BTstack startup so WiFi AP has time to let clients connect and
+    // complete DHCP before BT scanning competes for the shared radio.
+    ESP_LOGI(TAG, "PS4 init task: waiting 10 s for WiFi to stabilise...");
+    vTaskDelay(pdMS_TO_TICKS(10000));
     ESP_LOGI(TAG, "PS4 init task started");
 
     esp_err_t ret = controller_ps4_init(NULL);
