@@ -12,6 +12,9 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
+#include "nvs.h"
+
+#define ROBOT_CFG_NVS_NS  "robot_cfg"
 
 // Component includes
 #include "control_manager.h"
@@ -25,6 +28,16 @@
 #endif
 
 static const char *TAG = "main";
+
+// Read an int32 from NVS robot_cfg namespace, return default_val if not found
+static int nvs_cfg_int(const char *key, int default_val) {
+    nvs_handle_t h;
+    if (nvs_open(ROBOT_CFG_NVS_NS, NVS_READONLY, &h) != ESP_OK) return default_val;
+    int32_t v;
+    esp_err_t ret = nvs_get_i32(h, key, &v);
+    nvs_close(h);
+    return (ret == ESP_OK) ? (int)v : default_val;
+}
 
 // ESP-IDF does not define disabled bool Kconfig symbols - provide 0 fallbacks
 #ifndef CONFIG_ROBOT_MOTOR_INVERT_LEFT
@@ -98,13 +111,19 @@ void app_main(void) {
     };
     ESP_ERROR_CHECK(motor_bts7960_init(&motor_cfg));
 
-    // Initialize differential drive mixer
+    // Initialize differential drive mixer — NVS values override Kconfig defaults
     ESP_LOGI(TAG, "Initializing differential drive...");
+    int deadzone_pct    = nvs_cfg_int("deadzone",   CONFIG_ROBOT_DRIVE_DEADZONE);
+    int expo_pct        = nvs_cfg_int("expo",        CONFIG_ROBOT_DRIVE_EXPO);
+    int max_speed_pct   = nvs_cfg_int("max_speed",  CONFIG_ROBOT_DRIVE_MAX_SPEED);
+    int slow_factor_pct = nvs_cfg_int("slow_factor", CONFIG_ROBOT_DRIVE_SLOW_MODE_FACTOR);
+    ESP_LOGI(TAG, "  drive config: deadzone=%d%% expo=%d%% max_speed=%d%% slow=%d%%",
+             deadzone_pct, expo_pct, max_speed_pct, slow_factor_pct);
     mixer_config_t mixer_cfg = {
-        .deadzone = CONFIG_ROBOT_DRIVE_DEADZONE / 100.0f,
-        .expo = CONFIG_ROBOT_DRIVE_EXPO / 100.0f,
-        .max_speed = CONFIG_ROBOT_DRIVE_MAX_SPEED / 100.0f,
-        .slow_mode_factor = CONFIG_ROBOT_DRIVE_SLOW_MODE_FACTOR / 100.0f,
+        .deadzone         = deadzone_pct    / 100.0f,
+        .expo             = expo_pct        / 100.0f,
+        .max_speed        = max_speed_pct   / 100.0f,
+        .slow_mode_factor = slow_factor_pct / 100.0f,
     };
     ESP_ERROR_CHECK(mixer_diffdrive_init(&mixer_cfg));
 

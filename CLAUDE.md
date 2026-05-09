@@ -238,6 +238,23 @@ typedef struct {
 5. **Document**: Add new doc file `docs/myname-protocol.md`
 6. **Update**: PROGRESS.md, README.md, architecture.md
 
+### NVS Config Contract
+
+Drive parameters are stored in NVS namespace `robot_cfg`:
+
+| Key | Type | Range | Kconfig fallback |
+|-----|------|-------|-----------------|
+| `deadzone` | int32 (%) | 0–20 | `CONFIG_ROBOT_DRIVE_DEADZONE` |
+| `expo` | int32 (%) | 0–100 | `CONFIG_ROBOT_DRIVE_EXPO` |
+| `max_speed` | int32 (%) | 10–100 | `CONFIG_ROBOT_DRIVE_MAX_SPEED` |
+| `slow_factor` | int32 (%) | 10–100 | `CONFIG_ROBOT_DRIVE_SLOW_MODE_FACTOR` |
+
+`main.c` reads NVS at boot (before `mixer_diffdrive_init`) and overrides Kconfig defaults.
+`controller_http.c` exposes `GET /config` and `POST /config` to read/write these values.
+Changes take effect after reboot.
+
+WiFi STA credentials are stored separately in namespace `wifi_cfg` (keys: `ssid`, `password`).
+
 ### Motor Control Contract
 
 Motor module accepts normalized speed:

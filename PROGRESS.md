@@ -5,7 +5,7 @@
 ## Current Status: 🔧 **CI Build Passing — Awaiting Hardware Test**
 
 **Version**: 0.1.0 (pre-release)
-**Last Updated**: 2026-05-08
+**Last Updated**: 2026-05-09
 
 ---
 
@@ -39,12 +39,17 @@
 - [x] Latched e-stop with re-arm
 
 ### Control Sources
-- [x] **PS4 DualShock 4** via ESP-IDF `esp_hidh` BT Classic HID host
-  - Auto-scan + auto-connect (no third-party library)
+- [x] **PS4 DualShock 4** via Bluepad32 + BTstack
+  - Auto-scan + auto-connect; supports PS4, PS5, Xbox, Switch controllers
   - Left stick Y/X → throttle/steering
   - Options → arm, Cross → e-stop, L1 → slow mode
 - [x] **Serial (UART)** — JSON line protocol
-- [x] **HTTP (Wi-Fi)** — REST API + basic web UI (AP mode default)
+- [x] **HTTP (Wi-Fi)** — REST API + tab-based web UI (AP mode default)
+  - Tab UI: Control / WiFi / Config / Status tabs
+  - AP always active (TrackRobot-Setup / trackrobot / 192.168.4.1)
+  - Optional STA home WiFi (saved to NVS via `/wifi`)
+  - Drive config via `/config` GET/POST (NVS-backed, reboot to apply)
+  - Reboot via `/reboot` POST
 
 ### CI / CD
 - [x] `ci.yml` — build on every push and PR (ESP-IDF v5.1.2, ESP32 target)
@@ -137,4 +142,4 @@ git push origin v1.0.0
 
 ---
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-09*
