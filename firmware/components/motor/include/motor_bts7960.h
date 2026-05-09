@@ -62,3 +62,10 @@ esp_err_t motor_set_speeds(float left_speed, float right_speed);
  */
 void motor_get_speeds(float *left_target, float *right_target,
                       float *left_actual, float *right_actual);
+
+/**
+ * @brief Emergency stop (immediate, bypasses slew-rate ramp)
+ *
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t motor_emergency_stop(void);
