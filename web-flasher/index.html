@@ -60,13 +60,29 @@
             </div>
 
             <div class="card">
-                <h2>&#x1F3AE; After Flashing</h2>
+                <h2>&#x2699;&#xFE0F; Configure After Flashing</h2>
+                <p>The robot starts an access point you can connect to immediately after flashing.</p>
                 <ol class="instructions">
-                    <li>Open a serial monitor at <strong>115200 baud</strong> and verify boot messages</li>
-                    <li>Hold <strong>PS + Share</strong> on the PS4 controller to enter pairing mode</li>
-                    <li>The ESP32 scans ~10 s — it connects automatically when the controller is found</li>
-                    <li>Press <strong>Options</strong> on the controller to arm the motors</li>
-                    <li>Drive with the left stick — <strong>Cross</strong> for emergency stop</li>
+                    <li>Connect your phone/PC to the WiFi network <strong>TrackRobot-Setup</strong> (password: <code>trackrobot</code>)</li>
+                    <li>Open <a href="http://192.168.4.1/" target="_blank"><strong>http://192.168.4.1/</strong></a> in your browser</li>
+                    <li>Use the <strong>WiFi</strong> tab to connect the robot to your home network (optional)</li>
+                    <li>Use the <strong>Config</strong> tab to tune drive parameters (deadzone, max speed, slow-mode factor)</li>
+                    <li>Use the <strong>Control</strong> tab to ARM and manually drive the robot via HTTP</li>
+                </ol>
+                <p style="margin-top: 12px; color: #718096; font-size: 0.9em;">
+                    The robot always keeps the <strong>TrackRobot-Setup</strong> AP active as a fallback,
+                    so you can reach the web UI even if home WiFi is unavailable.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2>&#x1F3AE; PS4 Controller — Quick Start</h2>
+                <ol class="instructions">
+                    <li>Hold <strong>PS + Share</strong> on the PS4 controller to enter pairing mode (light bar flashes rapidly)</li>
+                    <li>The ESP32 auto-connects — look for "Controller connected" on the serial monitor</li>
+                    <li>Press <strong>Options</strong> (&equiv;) to arm the motors</li>
+                    <li>Drive with the left stick — <strong>Cross (&times;)</strong> for emergency stop</li>
+                    <li>Hold <strong>L1</strong> for slow mode (50% speed)</li>
                 </ol>
             </div>
         </main>
