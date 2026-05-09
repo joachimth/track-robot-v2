@@ -11,7 +11,7 @@ Three GitHub Actions workflows provide full automation:
 
 ## Workflow 1: Continuous Integration (ci.yml)
 
-**Triggers**: Push to any branch, Pull requests
+**Triggers**: Push to `main` or `claude/**`, Pull requests to `main`
 
 **Steps**:
 1. Checkout code with submodules
@@ -21,10 +21,15 @@ Three GitHub Actions workflows provide full automation:
 
 **Purpose**: Verify all commits compile successfully
 
-**Artifacts** (available for 7 days):
+**Artifacts** (available for 30 days):
 - `bootloader.bin`
 - `partition-table.bin`
 - `track-robot.bin`
+
+**Rolling latest release** (main branch only):
+On every merge to `main`, the `latest` GitHub pre-release is automatically
+recreated with the freshly-built binaries. This keeps the web flasher always
+pointing to working firmware without requiring a versioned tag.
 
 **Example log**:
 ```
@@ -32,6 +37,7 @@ Three GitHub Actions workflows provide full automation:
 ✓ Setup ESP-IDF v5.1.2
 ✓ Build firmware
 ✓ Upload artifacts
+✓ Publish rolling latest release (main only)
 ```
 
 ## Workflow 2: Release Build (release.yml)
@@ -154,14 +160,14 @@ git push origin v1.0.0
 
 ## Troubleshooting CI
 
-### Build Fails: Submodule Not Found
+### Build Fails: Bluepad32 Component Not Found
 
-**Symptom**: `ps3` component not found
+**Symptom**: `ps4`, `cmd_nvs`, or `cmd_system` component not found
 
-**Fix**: Ensure workflow uses `actions/checkout` with `submodules: recursive`
+**Fix**: These components are part of the repository — ensure a full checkout:
 
 ```yaml
-- uses: actions/checkout@v3
+- uses: actions/checkout@v4
   with:
     submodules: recursive
 ```
@@ -225,4 +231,4 @@ idf.py build
 - Hardware-in-the-loop testing
 - Automated firmware signing
 
-*Last updated: 2025-12-28*
+*Last updated: 2026-05-09*
