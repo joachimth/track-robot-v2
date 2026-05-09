@@ -13,7 +13,6 @@
 
 #include "btstack_port_esp32.h"
 #include "btstack_run_loop.h"
-#include "btstack_stdio_esp32.h"
 #include "uni.h"
 #include "bt/uni_bt.h"
 #include "controller/uni_gamepad.h"
@@ -165,11 +164,8 @@ static void bluepad_task(void* arg) {
     (void)arg;
     ESP_LOGI(TAG, "Starting Bluepad32 / BTstack backend");
 
-#ifdef CONFIG_ESP_CONSOLE_UART
-#ifndef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
-    btstack_stdio_init();
-#endif
-#endif
+    // Do NOT initialize BTstack stdio/UART console.
+    // ESP-IDF already owns the UART driver.
 
     btstack_init();
     uni_platform_set_custom(&s_platform);
