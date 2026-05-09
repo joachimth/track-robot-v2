@@ -56,7 +56,14 @@ esp_err_t safety_emergency_stop(void);
 
 /**
  * @brief Update failsafe watchdog (call on valid control input)
- * 
+ *
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t safety_update_watchdog(void);
+
+/**
+ * @brief Get current safety state
+ *
+ * @return safety_state_t Current state (DISARMED / ARMED / ESTOP)
+ */
+safety_state_t safety_get_state(void);

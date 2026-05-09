@@ -172,6 +172,14 @@ esp_err_t motor_set_speeds(float left_speed, float right_speed) {
     return ESP_OK;
 }
 
+void motor_get_speeds(float *left_target, float *right_target,
+                      float *left_actual, float *right_actual) {
+    if (left_target)  *left_target  = target_left_speed;
+    if (right_target) *right_target = target_right_speed;
+    if (left_actual)  *left_actual  = current_left_speed;
+    if (right_actual) *right_actual = current_right_speed;
+}
+
 esp_err_t motor_emergency_stop(void) {
     // Immediate stop (bypass ramping)
     target_left_speed = 0.0f;

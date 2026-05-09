@@ -18,6 +18,7 @@
 #include "control_manager.h"
 #include "control_frame.h"
 #include "safety_failsafe.h"
+#include "motor_bts7960.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -356,16 +357,72 @@ static esp_err_t arm_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static const char *state_name(safety_state_t s) {
+    switch (s) {
+        case SAFETY_STATE_ARMED:    return "ARMED";
+        case SAFETY_STATE_ESTOP:    return "ESTOP";
+        default:                    return "DISARMED";
+    }
+}
+
+static const char *source_name(control_source_t s) {
+    switch (s) {
+        case CONTROL_SOURCE_PS4:    return "PS4";
+        case CONTROL_SOURCE_SERIAL: return "SERIAL";
+        case CONTROL_SOURCE_HTTP:   return "HTTP";
+        default:                    return "NONE";
+    }
+}
+
 static esp_err_t status_get_handler(httpd_req_t *req) {
-    char json[384];
+    control_status_t cs;
+    control_manager_get_status(&cs);
+
+    float lt = 0, rt = 0, la = 0, ra = 0;
+    motor_get_speeds(&lt, &rt, &la, &ra);
+
+    safety_state_t st = safety_get_state();
+
+    char json[640];
     snprintf(json, sizeof(json),
-             "{\"armed\":%s,\"source\":%d,\"wifi\":{\"ap\":%s,\"sta_connected\":%s,\"sta_connecting\":%s,\"sta_ssid\":\"%s\",\"setup_ip\":\"192.168.4.1\"}}",
-             safety_is_armed() ? "true" : "false",
-             control_manager_get_active_source(),
-             ap_started ? "true" : "false",
-             sta_connected ? "true" : "false",
-             sta_connecting ? "true" : "false",
-             active_sta_ssid);
+        "{"
+        "\"state\":\"%s\","
+        "\"armed\":%s,"
+        "\"source\":\"%s\","
+        "\"input\":{"
+          "\"throttle\":%.3f,"
+          "\"steering\":%.3f,"
+          "\"slow_mode\":%s,"
+          "\"estop\":%s,"
+          "\"arm\":%s"
+        "},"
+        "\"output\":{"
+          "\"left_target\":%.3f,"
+          "\"right_target\":%.3f,"
+          "\"left_actual\":%.3f,"
+          "\"right_actual\":%.3f"
+        "},"
+        "\"wifi\":{"
+          "\"ap\":%s,"
+          "\"sta_connected\":%s,"
+          "\"sta_connecting\":%s,"
+          "\"sta_ssid\":\"%s\","
+          "\"setup_ip\":\"192.168.4.1\""
+        "}"
+        "}",
+        state_name(st),
+        (st == SAFETY_STATE_ARMED) ? "true" : "false",
+        source_name(cs.source),
+        cs.frame.throttle,
+        cs.frame.steering,
+        cs.frame.slow_mode ? "true" : "false",
+        cs.frame.estop     ? "true" : "false",
+        cs.frame.arm       ? "true" : "false",
+        lt, rt, la, ra,
+        ap_started     ? "true" : "false",
+        sta_connected  ? "true" : "false",
+        sta_connecting ? "true" : "false",
+        active_sta_ssid);
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, json);
@@ -509,6 +566,18 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         ".ws-ap{background:#1e3a5f;color:#7dd3fc}"
         ".ws-sta{background:#14532d;color:#86efac}"
         ".ws-off{background:#2d2d2d;color:#9ca3af}"
+        ".ws-armed{background:#14532d;color:#86efac}"
+        ".ws-disarmed{background:#1e293b;color:#64748b}"
+        ".ws-estop{background:#7f1d1d;color:#fca5a5}"
+        ".bar-wrap{position:relative;height:22px;background:#0f172a;border:1px solid #334155;"
+        "border-radius:4px;overflow:hidden;margin-bottom:4px}"
+        ".bar-fill{position:absolute;top:0;height:100%;width:0;transition:width .1s,left .1s;"
+        "border-radius:3px}"
+        ".bar-lbl{position:absolute;right:6px;top:2px;font-size:.8em;color:#e2e8f0;pointer-events:none}"
+        ".ind{display:inline-block;padding:3px 8px;border-radius:4px;font-size:.75em;font-weight:700;"
+        "background:#1e293b;color:#475569;border:1px solid #334155}"
+        ".ind.active{background:#7f1d1d;color:#fca5a5;border-color:#dc2626}"
+        ".ind.active-ok{background:#14532d;color:#86efac;border-color:#16a34a}"
         "hr{border:none;border-top:1px solid #334155;margin:14px 0}"
         "</style></head><body>", -1);
 
@@ -618,8 +687,42 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
     httpd_resp_send_chunk(req,
         "<div class='tab-pane' id='pane-status'>"
         "<div class='card'>"
-        "<h2>Live status <small style='font-weight:normal;color:#475569'>(auto-refresh 3 s)</small></h2>"
-        "<pre id='status-pre'>Loading...</pre>"
+        "<h2>System <small style='font-weight:normal;color:#475569'>(auto-refresh 1 s)</small></h2>"
+        "<div style='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px'>"
+        "<span id='st-state' class='wifi-status ws-off'>?</span>"
+        "<span id='st-source' style='color:#94a3b8;font-size:.9em'>Source: —</span>"
+        "<span id='st-slow'   style='color:#94a3b8;font-size:.9em'></span>"
+        "</div>"
+        "</div>"
+
+        "<div class='card'>"
+        "<h2>Controller input</h2>"
+        "<label>Throttle</label>"
+        "<div class='bar-wrap'><div id='bar-thr' class='bar-fill' style='background:#38bdf8'></div>"
+        "<span id='lbl-thr' class='bar-lbl'>0.00</span></div>"
+        "<label>Steering</label>"
+        "<div class='bar-wrap'><div id='bar-str' class='bar-fill' style='background:#a78bfa'></div>"
+        "<span id='lbl-str' class='bar-lbl'>0.00</span></div>"
+        "<div style='margin-top:10px;display:flex;gap:8px'>"
+        "<span id='ind-slow'  class='ind'>SLOW</span>"
+        "<span id='ind-arm'   class='ind'>ARM</span>"
+        "<span id='ind-estop' class='ind'>ESTOP</span>"
+        "</div>"
+        "</div>"
+
+        "<div class='card'>"
+        "<h2>Motor output</h2>"
+        "<label>Left motor (target / actual)</label>"
+        "<div class='bar-wrap'><div id='bar-ml' class='bar-fill' style='background:#4ade80'></div>"
+        "<span id='lbl-ml' class='bar-lbl'>0.00</span></div>"
+        "<label>Right motor (target / actual)</label>"
+        "<div class='bar-wrap'><div id='bar-mr' class='bar-fill' style='background:#4ade80'></div>"
+        "<span id='lbl-mr' class='bar-lbl'>0.00</span></div>"
+        "</div>"
+
+        "<div class='card'>"
+        "<h2>Raw JSON</h2>"
+        "<pre id='status-pre' style='font-size:.78em'>Loading...</pre>"
         "<button class='btn-neutral' style='margin-top:8px' onclick='loadStatus()'>Refresh now</button>"
         "</div>"
         "</div>", -1);
@@ -723,17 +826,58 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "fetch('/reboot',{method:'POST'}).catch(()=>{});"
         "setTimeout(()=>msg('reboot-msg','ESP32 rebooting — reconnect in ~5 s','msg-info'),500);}"
 
+        // Bar helper: value in [-1,1], fills from centre
+        "function setBar(id,lblId,v){"
+        "var el=document.getElementById(id);"
+        "var lbl=document.getElementById(lblId);"
+        "var pct=Math.abs(v)*50;"
+        "if(v>=0){el.style.left='50%';el.style.width=pct+'%';}"
+        "else{el.style.left=(50-pct)+'%';el.style.width=pct+'%';}"
+        "if(lbl)lbl.textContent=(v>=0?'+':'')+v.toFixed(2);}"
+
+        "function setInd(id,on,okStyle){"
+        "var el=document.getElementById(id);"
+        "el.classList.remove('active','active-ok');"
+        "if(on)el.classList.add(okStyle?'active-ok':'active');}"
+
         // Status helpers
         "async function loadStatus(){"
-        "try{var r=await fetch('/status');var d=await r.json();"
+        "try{"
+        "var r=await fetch('/status');var d=await r.json();"
         "document.getElementById('status-pre').textContent=JSON.stringify(d,null,2);"
-        "}catch(e){document.getElementById('status-pre').textContent='Error loading status';}}"
+
+        // State badge
+        "var stEl=document.getElementById('st-state');"
+        "stEl.textContent=d.state||'?';"
+        "stEl.className='wifi-status';"
+        "if(d.state==='ARMED')stEl.classList.add('ws-armed');"
+        "else if(d.state==='ESTOP')stEl.classList.add('ws-estop');"
+        "else stEl.classList.add('ws-disarmed');"
+        "document.getElementById('st-source').textContent='Source: '+(d.source||'NONE');"
+        "document.getElementById('st-slow').textContent=d.input&&d.input.slow_mode?'SLOW MODE':'';"
+
+        // Input bars
+        "if(d.input){"
+        "setBar('bar-thr','lbl-thr',d.input.throttle||0);"
+        "setBar('bar-str','lbl-str',d.input.steering||0);"
+        "setInd('ind-slow',d.input.slow_mode,true);"
+        "setInd('ind-arm',d.input.arm,true);"
+        "setInd('ind-estop',d.input.estop,false);}"
+
+        // Output bars
+        "if(d.output){"
+        "setBar('bar-ml','lbl-ml',d.output.left_actual||0);"
+        "setBar('bar-mr','lbl-mr',d.output.right_actual||0);"
+        "document.getElementById('bar-ml').style.background=Math.abs(d.output.left_actual||0)>.05?'#4ade80':'#334155';"
+        "document.getElementById('bar-mr').style.background=Math.abs(d.output.right_actual||0)>.05?'#4ade80':'#334155';}"
+
+        "}catch(e){document.getElementById('status-pre').textContent='Error: '+e.message;}}"
 
         "loadStatus();"
         "setInterval(()=>{"
         "var active=document.querySelector('.tab-pane.active');"
         "if(active&&active.id==='pane-status')loadStatus();"
-        "},3000);"
+        "},1000);"
         "</script></body></html>", -1);
 
     httpd_resp_send_chunk(req, NULL, 0);  // end chunked response
