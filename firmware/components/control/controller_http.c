@@ -149,6 +149,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 static esp_err_t start_fallback_ap(void) {
+    if (ap_started) return ESP_OK;  // already running, avoid double DHCP restart
+
     wifi_config_t ap_config = {
         .ap = {
             .ssid = WIFI_AP_SSID,
@@ -164,12 +166,9 @@ static esp_err_t start_fallback_ap(void) {
         ap_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
+    ESP_LOGI(TAG, "Starting fallback setup AP...");
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-
-    if (!ap_started) {
-        ESP_LOGI(TAG, "Starting fallback setup AP...");
-    }
 
     return ESP_OK;
 }
