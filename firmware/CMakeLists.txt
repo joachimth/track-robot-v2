@@ -12,6 +12,7 @@ set(BLUEPAD32_COMPONENTS "${BLUEPAD32_SRC}/components")
 set(BTSTACK_ROOT "${BLUEPAD32_ROOT}/external/btstack")
 set(BTSTACK_ESP32_PORT "${BTSTACK_ROOT}/port/esp32")
 set(BTSTACK_COMPONENT_DIR "${BLUEPAD32_COMPONENTS}/btstack")
+set(BLUEPAD32_CMAKE "${BLUEPAD32_COMPONENTS}/bluepad32/CMakeLists.txt")
 
 if(NOT EXISTS "${BLUEPAD32_COMPONENTS}/bluepad32/CMakeLists.txt")
     message(STATUS "Fetching Bluepad32 from ${BLUEPAD32_REPO}")
@@ -22,6 +23,25 @@ if(NOT EXISTS "${BLUEPAD32_COMPONENTS}/bluepad32/CMakeLists.txt")
     if(NOT BLUEPAD32_CLONE_RESULT EQUAL 0)
         message(FATAL_ERROR "Failed to fetch Bluepad32")
     endif()
+endif()
+
+# Patch upstream Bluepad32 for ESP-IDF 5.x.
+# uni_gpio.h includes driver/gpio.h but upstream does not list
+# the ESP-IDF 'driver' component in REQUIRES.
+file(READ "${BLUEPAD32_CMAKE}" BLUEPAD32_CMAKE_CONTENT)
+string(FIND "${BLUEPAD32_CMAKE_CONTENT}" "REQUIRES driver" BLUEPAD32_HAS_DRIVER)
+
+if(BLUEPAD32_HAS_DRIVER EQUAL -1)
+    message(STATUS "Patching Bluepad32 component dependencies for ESP-IDF 5.x")
+
+    string(REPLACE
+        "REQUIRES"
+        "REQUIRES driver"
+        BLUEPAD32_CMAKE_PATCHED
+        "${BLUEPAD32_CMAKE_CONTENT}"
+    )
+
+    file(WRITE "${BLUEPAD32_CMAKE}" "${BLUEPAD32_CMAKE_PATCHED}")
 endif()
 
 # Bluepad32 requires BTstack to be generated/installed as an ESP-IDF component.
