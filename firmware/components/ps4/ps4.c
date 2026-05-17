@@ -115,9 +115,16 @@ static void platform_on_device_disconnected(uni_hid_device_t* d) {
     (void)d;
     ESP_LOGW(TAG, "Controller disconnected");
 
+    ps4_gamepad_t snapshot;
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-    memset(&s_state, 0, sizeof(s_state));
+    memset(&s_state, 0, sizeof(s_state));  // connected=false, all zeros
+    snapshot = s_state;
     xSemaphoreGive(s_mutex);
+
+    // Notify controller layer so it can submit a zero frame immediately
+    if (s_callback) {
+        s_callback(&snapshot);
+    }
 }
 
 static uni_error_t platform_on_device_ready(uni_hid_device_t* d) {

@@ -298,7 +298,7 @@ typedef struct {
 typedef enum {
     SAFETY_STATE_DISARMED = 0,  // Default on boot — motors off
     SAFETY_STATE_ARMED    = 1,  // Motors enabled
-    SAFETY_STATE_ESTOP    = 2,  // Emergency stop — latched, requires reboot
+    SAFETY_STATE_ESTOP    = 2,  // Emergency stop — latched, reset via POST /estop-reset
 } safety_state_t;
 ```
 
@@ -365,6 +365,7 @@ PS4 init is deferred 10 s after boot (`ps4_init_task`) to allow WiFi to stabiliz
 | GET | `/` | Embedded web UI (HTML tabs) |
 | POST | `/control` | `{throttle, steering, slow_mode}` |
 | POST | `/estop` | Trigger emergency stop |
+| POST | `/estop-reset` | Clear e-stop → DISARMED (then re-arm to drive) |
 | POST | `/arm` | Arm the robot |
 | GET | `/status` | JSON system status |
 | POST | `/wifi` | `{ssid, password}` → saved to NVS |
@@ -598,6 +599,7 @@ If partition offsets change (new scheme), update the generation scripts in `rele
 | `safety_failsafe` | `safety_arm()` | Transition to ARMED (fails if ESTOP) |
 | `safety_failsafe` | `safety_disarm()` | Transition to DISARMED, calls e-stop |
 | `safety_failsafe` | `safety_emergency_stop()` | Latch ESTOP state |
+| `safety_failsafe` | `safety_estop_reset()` | Clear ESTOP → DISARMED (re-arm required) |
 | `safety_failsafe` | `safety_is_armed()` | Query armed state |
 | `safety_failsafe` | `safety_update_watchdog()` | Reset watchdog timer |
 | `ps4` | `ps4_init(mac, callback)` | Start Bluepad32 + BTstack |
