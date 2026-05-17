@@ -160,10 +160,20 @@ esp_err_t safety_emergency_stop(void) {
     current_state = SAFETY_STATE_ESTOP;
     current_led_pattern = LED_PATTERN_ESTOP;
     motor_emergency_stop();
-    
+
     ESP_LOGE(TAG, "!!! EMERGENCY STOP !!!");
-    ESP_LOGE(TAG, "Press ARM to clear and re-arm");
-    
+    ESP_LOGE(TAG, "Use /estop-reset (HTTP) or reboot to clear");
+
+    return ESP_OK;
+}
+
+esp_err_t safety_estop_reset(void) {
+    if (current_state != SAFETY_STATE_ESTOP) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    current_state = SAFETY_STATE_DISARMED;
+    current_led_pattern = LED_PATTERN_DISARMED;
+    ESP_LOGI(TAG, "E-STOP cleared — system DISARMED (re-arm to continue)");
     return ESP_OK;
 }
 

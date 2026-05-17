@@ -67,3 +67,12 @@ esp_err_t safety_update_watchdog(void);
  * @return safety_state_t Current state (DISARMED / ARMED / ESTOP)
  */
 safety_state_t safety_get_state(void);
+
+/**
+ * @brief Reset emergency stop — transitions ESTOP → DISARMED
+ *
+ * The system must be explicitly re-armed after calling this.
+ *
+ * @return esp_err_t ESP_OK on success, ESP_ERR_INVALID_STATE if not in ESTOP
+ */
+esp_err_t safety_estop_reset(void);

@@ -24,6 +24,14 @@ static void ps4_input_cb(const ps4_gamepad_t *g) {
     control_frame_t frame = {0};
     frame.timestamp = xTaskGetTickCount();
 
+    if (!g->connected) {
+        // Submit zero frame on disconnect so motors stop immediately.
+        // The failsafe watchdog will auto-disarm after timeout.
+        control_manager_submit(CONTROL_SOURCE_PS4, &frame);
+        ESP_LOGW(TAG, "Controller disconnected — zero frame submitted");
+        return;
+    }
+
     // Left stick Y is inverted: push up (negative ly) = forward
     frame.throttle  = control_clamp(-g->ly);
     frame.steering  = control_clamp(g->lx);

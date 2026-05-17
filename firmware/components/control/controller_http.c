@@ -346,6 +346,17 @@ static esp_err_t estop_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t estop_reset_post_handler(httpd_req_t *req) {
+    esp_err_t ret = safety_estop_reset();
+    httpd_resp_set_type(req, "application/json");
+    if (ret == ESP_OK) {
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"E-STOP cleared — re-arm to continue\"}");
+    } else {
+        httpd_resp_sendstr(req, "{\"status\":\"err\",\"message\":\"Not in E-STOP state\"}");
+    }
+    return ESP_OK;
+}
+
 static esp_err_t arm_post_handler(httpd_req_t *req) {
     control_frame_t frame = {0};
     frame.arm = true;
@@ -602,9 +613,28 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "<div class='row'>"
         "<button class='btn-arm' onclick='armRobot()'>ARM</button>"
         "<button class='btn-stop' onclick='estopRobot()'>E-STOP</button>"
+        "<button id='btn-estop-reset' class='btn-neutral' onclick='resetEstop()'"
+        " style='display:none'>RESET E-STOP</button>"
         "</div>"
         "<div id='ctrl-msg'></div>"
         "</div>"
+
+        "<div class='card'>"
+        "<h2>Live status</h2>"
+        "<div style='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px'>"
+        "<span id='cs-state' class='wifi-status ws-off'>---</span>"
+        "<span id='cs-source' style='color:#94a3b8;font-size:.9em'>Source: —</span>"
+        "</div>"
+        "<label>Left motor (actual)</label>"
+        "<div class='bar-wrap'><div id='cs-bar-ml' class='bar-fill' style='background:#334155'></div>"
+        "<span id='cs-lbl-ml' class='bar-lbl'>0.00</span></div>"
+        "<label>Right motor (actual)</label>"
+        "<div class='bar-wrap'><div id='cs-bar-mr' class='bar-fill' style='background:#334155'></div>"
+        "<span id='cs-lbl-mr' class='bar-lbl'>0.00</span></div>"
+        "<div style='margin-top:8px;font-size:.82em;color:#475569'>"
+        "Current draw: N/A (IS pins not implemented in v0.1.0)</div>"
+        "</div>"
+
         "<div class='card'>"
         "<h2>Manual drive (HTTP)</h2>"
         "<label>Throttle <span class='val' id='tval'>0%</span></label>"
@@ -739,6 +769,7 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "if(t==='status')loadStatus();"
         "if(t==='wifi')loadWifiStatus();"
         "if(t==='config')loadConfig();"
+        "if(t==='control')updateControlStatus();"
         "}"
 
         // Control helpers
@@ -747,12 +778,20 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "el.innerHTML=\"<div class='msg \"+cls+\"'>\"+text+\"</div>\";}"
 
         "async function armRobot(){"
-        "await fetch('/arm',{method:'POST'});"
-        "msg('ctrl-msg','System armed','msg-ok');}"
+        "var r=await fetch('/arm',{method:'POST'});"
+        "msg('ctrl-msg','ARM sent — robot armed','msg-ok');"
+        "setTimeout(updateControlStatus,200);}"
 
         "async function estopRobot(){"
         "await fetch('/estop',{method:'POST'});"
-        "msg('ctrl-msg','E-STOP triggered','msg-err');}"
+        "msg('ctrl-msg','E-STOP triggered','msg-err');"
+        "setTimeout(updateControlStatus,200);}"
+
+        "async function resetEstop(){"
+        "var r=await fetch('/estop-reset',{method:'POST'});"
+        "var d=await r.json();"
+        "msg('ctrl-msg',d.message,d.status==='ok'?'msg-ok':'msg-err');"
+        "setTimeout(updateControlStatus,200);}"
 
         "async function sendDrive(){"
         "var t=parseInt(document.getElementById('thr').value)/100;"
@@ -840,6 +879,28 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "el.classList.remove('active','active-ok');"
         "if(on)el.classList.add(okStyle?'active-ok':'active');}"
 
+        // Control tab live status
+        "async function updateControlStatus(){"
+        "try{"
+        "var r=await fetch('/status');var d=await r.json();"
+        "var stEl=document.getElementById('cs-state');"
+        "stEl.textContent=d.state||'?';"
+        "stEl.className='wifi-status';"
+        "if(d.state==='ARMED')stEl.classList.add('ws-armed');"
+        "else if(d.state==='ESTOP')stEl.classList.add('ws-estop');"
+        "else stEl.classList.add('ws-disarmed');"
+        "document.getElementById('cs-source').textContent='Source: '+(d.source||'NONE');"
+        "if(d.output){"
+        "setBar('cs-bar-ml','cs-lbl-ml',d.output.left_actual||0);"
+        "setBar('cs-bar-mr','cs-lbl-mr',d.output.right_actual||0);"
+        "document.getElementById('cs-bar-ml').style.background="
+        "Math.abs(d.output.left_actual||0)>.05?'#4ade80':'#334155';"
+        "document.getElementById('cs-bar-mr').style.background="
+        "Math.abs(d.output.right_actual||0)>.05?'#4ade80':'#334155';}"
+        "var rb=document.getElementById('btn-estop-reset');"
+        "if(rb)rb.style.display=d.state==='ESTOP'?'':'none';"
+        "}catch(e){}}"
+
         // Status helpers
         "async function loadStatus(){"
         "try{"
@@ -874,9 +935,11 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "}catch(e){document.getElementById('status-pre').textContent='Error: '+e.message;}}"
 
         "loadStatus();"
+        "updateControlStatus();"
         "setInterval(()=>{"
         "var active=document.querySelector('.tab-pane.active');"
         "if(active&&active.id==='pane-status')loadStatus();"
+        "if(active&&active.id==='pane-control')updateControlStatus();"
         "},1000);"
         "</script></body></html>", -1);
 
@@ -894,7 +957,7 @@ static esp_err_t reboot_post_handler(httpd_req_t *req) {
 
 static esp_err_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 13;
 
     if (server) return ESP_OK;
 
@@ -904,21 +967,22 @@ static esp_err_t start_webserver(void) {
     }
 
     const httpd_uri_t uris[] = {
-        {.uri = "/control", .method = HTTP_POST, .handler = control_post_handler},
-        {.uri = "/wifi",    .method = HTTP_POST, .handler = wifi_post_handler},
-        {.uri = "/estop",   .method = HTTP_POST, .handler = estop_post_handler},
-        {.uri = "/arm",     .method = HTTP_POST, .handler = arm_post_handler},
-        {.uri = "/status",  .method = HTTP_GET,  .handler = status_get_handler},
-        {.uri = "/config",  .method = HTTP_GET,  .handler = config_get_handler},
-        {.uri = "/config",  .method = HTTP_POST, .handler = config_post_handler},
-        {.uri = "/reboot",  .method = HTTP_POST, .handler = reboot_post_handler},
-        {.uri = "/",        .method = HTTP_GET,  .handler = index_get_handler},
+        {.uri = "/control",     .method = HTTP_POST, .handler = control_post_handler},
+        {.uri = "/wifi",        .method = HTTP_POST, .handler = wifi_post_handler},
+        {.uri = "/estop",       .method = HTTP_POST, .handler = estop_post_handler},
+        {.uri = "/estop-reset", .method = HTTP_POST, .handler = estop_reset_post_handler},
+        {.uri = "/arm",         .method = HTTP_POST, .handler = arm_post_handler},
+        {.uri = "/status",      .method = HTTP_GET,  .handler = status_get_handler},
+        {.uri = "/config",      .method = HTTP_GET,  .handler = config_get_handler},
+        {.uri = "/config",      .method = HTTP_POST, .handler = config_post_handler},
+        {.uri = "/reboot",      .method = HTTP_POST, .handler = reboot_post_handler},
+        {.uri = "/",            .method = HTTP_GET,  .handler = index_get_handler},
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
         httpd_register_uri_handler(server, &uris[i]);
     }
 
-    ESP_LOGI(TAG, "HTTP server started — 9 endpoints registered");
+    ESP_LOGI(TAG, "HTTP server started — 10 endpoints registered");
     ESP_LOGI(TAG, "Control UI: http://192.168.4.1/ (connect to TrackRobot-Setup AP first)");
     return ESP_OK;
 }
