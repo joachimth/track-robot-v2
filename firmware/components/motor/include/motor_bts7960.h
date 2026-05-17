@@ -53,8 +53,19 @@ esp_err_t motor_bts7960_init(const motor_config_t *config);
 esp_err_t motor_set_speeds(float left_speed, float right_speed);
 
 /**
- * @brief Emergency stop (immediate, no ramping)
- * 
+ * @brief Get current motor speeds
+ *
+ * @param left_target  Target left speed (set by control loop)
+ * @param right_target Target right speed (set by control loop)
+ * @param left_actual  Actual left speed (after slew-rate ramp)
+ * @param right_actual Actual right speed (after slew-rate ramp)
+ */
+void motor_get_speeds(float *left_target, float *right_target,
+                      float *left_actual, float *right_actual);
+
+/**
+ * @brief Emergency stop (immediate, bypasses slew-rate ramp)
+ *
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t motor_emergency_stop(void);

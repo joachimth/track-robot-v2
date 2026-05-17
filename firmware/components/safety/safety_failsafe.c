@@ -171,3 +171,7 @@ esp_err_t safety_update_watchdog(void) {
     last_watchdog_tick = xTaskGetTickCount();
     return ESP_OK;
 }
+
+safety_state_t safety_get_state(void) {
+    return current_state;
+}

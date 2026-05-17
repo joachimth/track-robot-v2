@@ -15,9 +15,13 @@
 
 static const char *TAG = "control_mgr";
 
+static const char *source_names[] = {"NONE", "PS4", "SERIAL", "HTTP"};
+
 // Current state
 static control_source_t active_source = CONTROL_SOURCE_NONE;
-static control_frame_t current_frame = {0};
+static control_frame_t  current_frame = {0};
+static float            last_left_output  = 0.0f;
+static float            last_right_output = 0.0f;
 static SemaphoreHandle_t mutex = NULL;
 static uint32_t last_update_tick = 0;
 
@@ -70,14 +74,31 @@ static void control_task(void *arg) {
             mixer_diffdrive_mix(current_frame.throttle, current_frame.steering,
                                 current_frame.slow_mode, &left_speed, &right_speed);
             motor_set_speeds(left_speed, right_speed);
-            
-            ESP_LOGD(TAG, "Control: src=%d t=%.2f s=%.2f -> L=%.2f R=%.2f slow=%d",
-                     active_source, current_frame.throttle, current_frame.steering,
-                     left_speed, right_speed, current_frame.slow_mode);
+            last_left_output  = left_speed;
+            last_right_output = right_speed;
         } else {
             motor_set_speeds(0.0f, 0.0f);
+            last_left_output  = 0.0f;
+            last_right_output = 0.0f;
         }
-        
+
+        // Periodic INFO log every 2 s (100 loops @ 50 Hz) when active
+        static uint32_t log_counter = 0;
+        if (active_source != CONTROL_SOURCE_NONE || safety_is_armed()) {
+            if (++log_counter >= 100) {
+                log_counter = 0;
+                const char *src = (active_source < 4) ? source_names[active_source] : "?";
+                ESP_LOGI(TAG, "[%s|%s] in: thr=%+.2f str=%+.2f slow=%d | out: L=%+.2f R=%+.2f",
+                         src,
+                         safety_is_armed() ? "ARMED" : "DISARMED",
+                         current_frame.throttle, current_frame.steering,
+                         (int)current_frame.slow_mode,
+                         last_left_output, last_right_output);
+            }
+        } else {
+            log_counter = 0;
+        }
+
         xSemaphoreGive(mutex);
         vTaskDelay(pdMS_TO_TICKS(CONTROL_LOOP_RATE_MS));
     }
@@ -130,4 +151,14 @@ control_source_t control_manager_get_active_source(void) {
     source = active_source;
     xSemaphoreGive(mutex);
     return source;
+}
+
+void control_manager_get_status(control_status_t *out) {
+    if (!out) return;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    out->source       = active_source;
+    out->frame        = current_frame;
+    out->left_output  = last_left_output;
+    out->right_output = last_right_output;
+    xSemaphoreGive(mutex);
 }
