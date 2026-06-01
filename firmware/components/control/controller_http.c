@@ -19,6 +19,7 @@
 #include "control_frame.h"
 #include "safety_failsafe.h"
 #include "motor_bts7960.h"
+#include "motor_monitor.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -29,8 +30,12 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "cJSON.h"
+#include "lwip/sockets.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 static const char *TAG = "ctrl_http";
 
@@ -44,6 +49,14 @@ static const char *TAG = "ctrl_http";
 #define WIFI_AP_MAX_CONN       CONFIG_ROBOT_WIFI_MAX_CONN
 #define WIFI_STA_TIMEOUT_MS    15000
 #define WIFI_RECONNECT_MS      5000
+
+// Captive portal: all DNS queries resolve to the AP gateway (192.168.4.1) and
+// every unknown HTTP path 302-redirects there, so connecting devices pop the
+// robot's web UI automatically. The IP matches the esp_netif AP default.
+#define CAPTIVE_REDIRECT_URL   "http://192.168.4.1/"
+#define DNS_PORT               53
+#define DNS_BUF_LEN            256
+static const uint8_t CAPTIVE_IP[4] = {192, 168, 4, 1};
 
 static httpd_handle_t server = NULL;
 static bool sta_connected = false;
@@ -394,7 +407,10 @@ static esp_err_t status_get_handler(httpd_req_t *req) {
 
     safety_state_t st = safety_get_state();
 
-    char json[640];
+    monitor_status_t mon;
+    motor_monitor_get_status(&mon);
+
+    char json[1024];
     snprintf(json, sizeof(json),
         "{"
         "\"state\":\"%s\","
@@ -413,6 +429,14 @@ static esp_err_t status_get_handler(httpd_req_t *req) {
           "\"left_actual\":%.3f,"
           "\"right_actual\":%.3f"
         "},"
+        "\"monitor\":{"
+          "\"left_ma\":%lu,"
+          "\"right_ma\":%lu,"
+          "\"overcurrent\":%s,"
+          "\"battery_enabled\":%s,"
+          "\"battery_mv\":%lu,"
+          "\"battery_low\":%s"
+        "},"
         "\"wifi\":{"
           "\"ap\":%s,"
           "\"sta_connected\":%s,"
@@ -430,6 +454,12 @@ static esp_err_t status_get_handler(httpd_req_t *req) {
         cs.frame.estop     ? "true" : "false",
         cs.frame.arm       ? "true" : "false",
         lt, rt, la, ra,
+        (unsigned long)mon.left_ma,
+        (unsigned long)mon.right_ma,
+        mon.overcurrent     ? "true" : "false",
+        mon.battery_enabled ? "true" : "false",
+        (unsigned long)mon.battery_mv,
+        mon.battery_low     ? "true" : "false",
         ap_started     ? "true" : "false",
         sta_connected  ? "true" : "false",
         sta_connecting ? "true" : "false",
@@ -631,8 +661,10 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "<label>Right motor (actual)</label>"
         "<div class='bar-wrap'><div id='cs-bar-mr' class='bar-fill' style='background:#334155'></div>"
         "<span id='cs-lbl-mr' class='bar-lbl'>0.00</span></div>"
-        "<div style='margin-top:8px;font-size:.82em;color:#475569'>"
-        "Current draw: N/A (IS pins not implemented in v0.1.0)</div>"
+        "<div style='margin-top:8px;font-size:.82em;color:#94a3b8'>"
+        "Current: L <span id='cs-cur-l'>--</span> A &nbsp;&bull;&nbsp; "
+        "R <span id='cs-cur-r'>--</span> A &nbsp;&bull;&nbsp; "
+        "Battery <span id='cs-batt'>--</span></div>"
         "</div>"
 
         "<div class='card'>"
@@ -897,6 +929,13 @@ static esp_err_t index_get_handler(httpd_req_t *req) {
         "Math.abs(d.output.left_actual||0)>.05?'#4ade80':'#334155';"
         "document.getElementById('cs-bar-mr').style.background="
         "Math.abs(d.output.right_actual||0)>.05?'#4ade80':'#334155';}"
+        "if(d.monitor){"
+        "document.getElementById('cs-cur-l').textContent=(d.monitor.left_ma/1000).toFixed(1);"
+        "document.getElementById('cs-cur-r').textContent=(d.monitor.right_ma/1000).toFixed(1);"
+        "var be=document.getElementById('cs-batt');"
+        "if(d.monitor.battery_enabled){"
+        "be.textContent=(d.monitor.battery_mv/1000).toFixed(2)+' V'+(d.monitor.battery_low?' (LOW)':'');"
+        "}else{be.textContent='n/a';}}"
         "var rb=document.getElementById('btn-estop-reset');"
         "if(rb)rb.style.display=d.state==='ESTOP'?'':'none';"
         "}catch(e){}}"
@@ -955,6 +994,85 @@ static esp_err_t reboot_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+// ---------------------------------------------------------------------------
+//  Captive portal DNS server — answers every A query with 192.168.4.1
+// ---------------------------------------------------------------------------
+
+static void dns_server_task(void *arg) {
+    uint8_t rx[DNS_BUF_LEN];
+    uint8_t tx[DNS_BUF_LEN];
+
+    struct sockaddr_in bind_addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(DNS_PORT),
+        .sin_addr.s_addr = htonl(INADDR_ANY),
+    };
+
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Captive DNS: failed to create socket (errno %d)", errno);
+        vTaskDelete(NULL);
+        return;
+    }
+    if (bind(sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr)) < 0) {
+        ESP_LOGE(TAG, "Captive DNS: failed to bind port 53 (errno %d)", errno);
+        close(sock);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Captive portal DNS server listening on port 53");
+
+    while (1) {
+        struct sockaddr_in client;
+        socklen_t clen = sizeof(client);
+        int len = recvfrom(sock, rx, sizeof(rx), 0, (struct sockaddr *)&client, &clen);
+        if (len < 12) {
+            continue;  // smaller than a DNS header — ignore
+        }
+
+        // Walk past the first question's QNAME (length-prefixed labels until 0).
+        int q = 12;
+        while (q < len && rx[q] != 0) {
+            q += rx[q] + 1;
+        }
+        q += 1;  // terminating zero label
+        q += 4;  // QTYPE + QCLASS
+        if (q > len || q + 16 > (int)sizeof(tx)) {
+            continue;  // malformed or no room for the answer
+        }
+
+        // Response = original header + question, with an appended A record.
+        memcpy(tx, rx, q);
+        tx[2] = 0x81; tx[3] = 0x80;  // QR=1, RD copied, RA=1, RCODE=0
+        tx[4] = 0x00; tx[5] = 0x01;  // QDCOUNT = 1
+        tx[6] = 0x00; tx[7] = 0x01;  // ANCOUNT = 1
+        tx[8] = 0x00; tx[9] = 0x00;  // NSCOUNT = 0
+        tx[10] = 0x00; tx[11] = 0x00; // ARCOUNT = 0 (drop any EDNS OPT)
+
+        int a = q;
+        tx[a++] = 0xC0; tx[a++] = 0x0C;  // NAME: pointer to question at offset 12
+        tx[a++] = 0x00; tx[a++] = 0x01;  // TYPE A
+        tx[a++] = 0x00; tx[a++] = 0x01;  // CLASS IN
+        tx[a++] = 0x00; tx[a++] = 0x00;
+        tx[a++] = 0x00; tx[a++] = 0x3C;  // TTL = 60 s
+        tx[a++] = 0x00; tx[a++] = 0x04;  // RDLENGTH = 4
+        tx[a++] = CAPTIVE_IP[0]; tx[a++] = CAPTIVE_IP[1];
+        tx[a++] = CAPTIVE_IP[2]; tx[a++] = CAPTIVE_IP[3];
+
+        sendto(sock, tx, a, 0, (struct sockaddr *)&client, clen);
+    }
+}
+
+// 302-redirect every unmatched request to the web UI so OS captive-portal
+// probes (e.g. /generate_204, /hotspot-detect.html) trigger the sign-in popup.
+static esp_err_t captive_redirect_handler(httpd_req_t *req, httpd_err_code_t err) {
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", CAPTIVE_REDIRECT_URL);
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
 static esp_err_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 13;
@@ -982,6 +1100,9 @@ static esp_err_t start_webserver(void) {
         httpd_register_uri_handler(server, &uris[i]);
     }
 
+    // Captive portal: redirect any unmatched path to the web UI.
+    httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, captive_redirect_handler);
+
     ESP_LOGI(TAG, "HTTP server started — 10 endpoints registered");
     ESP_LOGI(TAG, "Control UI: http://192.168.4.1/ (connect to TrackRobot-Setup AP first)");
     return ESP_OK;
@@ -990,5 +1111,12 @@ static esp_err_t start_webserver(void) {
 esp_err_t controller_http_init(void) {
     ESP_ERROR_CHECK(init_wifi());
     ESP_ERROR_CHECK(start_webserver());
+
+    // Start the captive-portal DNS responder (AP is always active).
+    BaseType_t dns_ret = xTaskCreate(dns_server_task, "captive_dns", 3072, NULL, 4, NULL);
+    if (dns_ret != pdPASS) {
+        ESP_LOGW(TAG, "Failed to start captive portal DNS task");
+    }
+
     return ESP_OK;
 }

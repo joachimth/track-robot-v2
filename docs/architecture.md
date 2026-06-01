@@ -77,9 +77,13 @@ All three sources produce a standardized `control_frame_t` and submit it via
 
 #### HTTP Controller (`controller_http.c`)
 
-- **Transport**: Wi-Fi (AP or STA mode)
-- **Protocol**: REST + basic web UI
-- **Endpoints**: `POST /control`, `POST /estop`, `POST /arm`, `GET /status`, `GET /`
+- **Transport**: Wi-Fi (AP always active + optional STA fallback)
+- **Protocol**: REST + tab-based web UI
+- **Endpoints**: `POST /control`, `POST /estop`, `POST /estop-reset`, `POST /arm`,
+  `GET /status`, `GET|POST /config`, `POST /wifi`, `POST /reboot`, `GET /`
+- **Captive portal**: a DNS server answers every query with `192.168.4.1` and a
+  404 handler 302-redirects unknown paths to the UI (see
+  [captive-portal.md](captive-portal.md))
 
 ### 2. Control Manager (`control_manager.c`)
 
@@ -135,6 +139,16 @@ Converts `(throttle, steering)` → `(left_speed, right_speed)`.
 - Shared timer for all 4 channels
 - Actual frequency: 80 MHz / 4096 = 19.53 kHz
 
+### 7. Monitoring (`motor_monitor.c`)
+
+- ADC1 oneshot sampling of the IBT-2 `R_IS`/`L_IS` current-sense pins (10 Hz)
+  and an optional battery voltage divider (1 Hz)
+- Latches an emergency stop via `motor_emergency_stop()` +
+  `safety_emergency_stop()` on per-motor over-current
+- Readings exposed in `GET /status` (`monitor` block) and the web UI
+- ADC1 only (ADC2 is unavailable while Wi-Fi is active); see
+  [monitoring.md](monitoring.md)
+
 ---
 
 ## Data Flow
@@ -170,6 +184,8 @@ PS4 / Serial / HTTP
 | `control_task` | 5 | 4 KB | Main control loop (50 Hz) |
 | `serial_task` | 4 | 4 KB | Serial JSON parsing |
 | `motor_ramp_task` | 4 | 2 KB | Motor slew-rate limiter |
+| `monitor` | 4 | 3 KB | Current-sense (10 Hz) + battery (1 Hz) sampling |
+| `captive_dns` | 4 | 3 KB | Captive-portal DNS responder (port 53) |
 | `bluepad32` | 5 | 12 KB | Bluepad32/BTstack run loop (replaces ps4_scan + hidh) |
 
 ---
@@ -189,6 +205,7 @@ Key groups:
 | Control Sources | Enable/disable PS4, Serial, HTTP |
 | WiFi | SSID, password, AP/STA mode |
 | Safety | Failsafe timeout, status LED pin |
+| Robot Monitoring | Over-current threshold, current scaling, battery divider |
 
 ---
 

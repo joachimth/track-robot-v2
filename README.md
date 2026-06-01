@@ -4,10 +4,12 @@ ESP32-based firmware for a tank-style tracked robot controlled by a PS4 DualShoc
 
 ## Features
 
-- **PS4 Controller**: Wireless Bluetooth Classic HID — no third-party library needed
+- **PS4 Controller**: Wireless Bluetooth via Bluepad32 + BTstack (PS4/PS5/Xbox/Switch)
 - **Multiple Control Modes**: PS4, Serial (UART), HTTP (Wi-Fi)
+- **Captive Portal**: join the setup AP and the control UI opens automatically
 - **High-Performance PWM**: 20 kHz motor control for smooth, silent operation
 - **Safety First**: Emergency stop, arming logic, 500 ms failsafe timeout
+- **Monitoring**: motor current-sense over-current cutoff + optional battery voltage
 - **Differential Drive**: Tank-style steering with deadzone, expo curves, slow mode
 - **Production Ready**: CI/CD builds, web-based flasher, comprehensive docs
 
@@ -203,6 +205,8 @@ Run `idf.py menuconfig` or edit `firmware/sdkconfig.defaults`:
 | [PS4 Setup](docs/ps4-setup.md) | Controller pairing and button mapping |
 | [Serial Protocol](docs/serial-protocol.md) | UART JSON command format |
 | [HTTP API](docs/http-api.md) | REST endpoint reference |
+| [Captive Portal](docs/captive-portal.md) | Auto-opening control UI on the setup AP |
+| [Monitoring](docs/monitoring.md) | Current-sense over-current + battery voltage |
 | [Safety & Failsafe](docs/safety-failsafe.md) | Arming, e-stop, timeout |
 | [PWM Tuning](docs/pwm-tuning.md) | Frequency and resolution guide |
 | [CI/CD](docs/cicd.md) | Build and release pipeline |
