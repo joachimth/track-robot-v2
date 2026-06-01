@@ -176,7 +176,7 @@ menu "Robot Configuration"
             default y
             help
                 Enable PS4 DualShock 4 wireless controller via Bluetooth Classic HID.
-                Uses ESP-IDF built-in esp_hidh component — no third-party library needed.
+                Uses Bluepad32 on top of BTstack (PS4/PS5/Xbox/Switch supported).
                 Press PS+Share on the controller to enter pairing mode.
 
         config ROBOT_ENABLE_SERIAL
@@ -259,6 +259,72 @@ menu "Robot Configuration"
             help
                 GPIO pin for status LED. Set to -1 to disable.
                 GPIO 2 is the built-in LED on most ESP32 DevKitC boards.
+    endmenu
+
+    menu "Robot Monitoring"
+        config ROBOT_ENABLE_MONITOR
+            bool "Enable current-sense + battery monitoring"
+            default y
+            help
+                Sample the IBT-2 R_IS/L_IS current-sense pins and an optional
+                battery voltage divider via ADC1. Logs warnings and latches an
+                emergency stop on over-current. Uses ADC1 only (ADC2 is
+                unavailable while Wi-Fi is active).
+
+        config ROBOT_OVERCURRENT_MA
+            int "Over-current threshold (mA)"
+            default 30000
+            range 1000 100000
+            help
+                Per-motor current at which an emergency stop is latched.
+                Default 30000 mA = 30 A.
+
+        config ROBOT_CURRENT_MV_PER_A
+            int "Current-sense scaling (mV per amp)"
+            default 118
+            range 1 10000
+            help
+                Calibration constant mapping the IS-pin ADC voltage to load
+                current: current_A = adc_mV / this. For a BTS7960 (k_ILIS
+                ~8500) with a 1 kohm IS resistor this is ~118 mV/A. MUST be
+                calibrated against a known load on real hardware.
+
+        config ROBOT_BATTERY_ADC_PIN
+            int "Battery voltage ADC pin (-1 to disable)"
+            default -1
+            range -1 39
+            help
+                ADC1-capable GPIO measuring the battery through a resistor
+                divider. The four current-sense pins (34/35/36/39) already use
+                every input-only ADC1 pin, so pick a free ADC1 pin (e.g. 32 or
+                33 if not used for motor enables, or 37/38 if broken out).
+                Set to -1 to disable battery monitoring. ADC2 pins do NOT work
+                while Wi-Fi is active.
+
+        config ROBOT_BATTERY_LOW_MV
+            int "Battery low-warning threshold (mV)"
+            default 10000
+            range 1000 30000
+            help
+                Battery voltage below which a low-battery warning is logged.
+                Default 10000 mV = 10 V (12 V pack nearing depletion).
+
+        config ROBOT_BATTERY_R1_OHMS
+            int "Battery divider top resistor R1 (ohms)"
+            default 10000
+            range 1 10000000
+            help
+                Top resistor of the battery voltage divider (battery+ to ADC
+                node). Vbatt = Vadc * (R1 + R2) / R2.
+
+        config ROBOT_BATTERY_R2_OHMS
+            int "Battery divider bottom resistor R2 (ohms)"
+            default 3300
+            range 1 10000000
+            help
+                Bottom resistor of the battery voltage divider (ADC node to
+                GND). Size R1/R2 so the ADC node stays below ~3.1 V at the
+                maximum battery voltage (ADC_ATTEN_DB_11 full scale).
     endmenu
 
 endmenu

@@ -5,6 +5,6 @@ idf_component_register(
         "controller_http.c"
         "controller_ps4.c"
     INCLUDE_DIRS "include"
-    REQUIRES driver esp_http_server esp_wifi json nvs_flash motor motion safety
+    REQUIRES driver esp_http_server esp_wifi lwip json nvs_flash motor motion safety monitor
     PRIV_REQUIRES ps4
 )

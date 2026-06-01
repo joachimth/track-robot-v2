@@ -23,6 +23,9 @@
 #include "motor_bts7960.h"
 #include "mixer_diffdrive.h"
 #include "safety_failsafe.h"
+#ifdef CONFIG_ROBOT_ENABLE_MONITOR
+#include "motor_monitor.h"
+#endif
 #ifdef CONFIG_ROBOT_ENABLE_PS4
 #include "controller_ps4.h"
 #endif
@@ -149,6 +152,18 @@ void app_main(void) {
     ESP_ERROR_CHECK(controller_http_init());
 #else
     ESP_LOGI(TAG, "HTTP controller disabled in config");
+#endif
+
+#ifdef CONFIG_ROBOT_ENABLE_MONITOR
+    // Initialize current-sense + battery monitoring (ADC1). Non-fatal: if no
+    // ADC inputs resolve, the robot still runs without monitoring.
+    ESP_LOGI(TAG, "Initializing monitoring (current sense + battery)...");
+    esp_err_t mon_ret = motor_monitor_init();
+    if (mon_ret != ESP_OK) {
+        ESP_LOGW(TAG, "Monitoring inactive: %s", esp_err_to_name(mon_ret));
+    }
+#else
+    ESP_LOGI(TAG, "Monitoring disabled in config");
 #endif
 
 #ifdef CONFIG_ROBOT_ENABLE_PS4
