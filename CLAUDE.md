@@ -364,6 +364,15 @@ PS4 init is deferred 10 s after boot (`ps4_init_task`) to allow WiFi to stabiliz
 - 15 s connection timeout → fallback to AP-only
 - Auto-reconnect every 5 s
 
+**Web UI** (served by `index_get_handler` as chunked C string literals — all
+inline CSS/JS, no external requests so it works offline):
+- Control tab: **virtual joystick** (canvas, touch + mouse), **keyboard** (WASD /
+  arrows) and **browser Gamepad API**, all feeding one 10 Hz drive loop that
+  POSTs `/control` (priority: joystick > keyboard > gamepad). Auto-arm on first
+  movement, big/floating E-STOP, connection-health dot with live latency.
+- Config tab: range sliders with live readouts + an expo-curve preview canvas.
+- Status tab: visual bars/indicators; raw JSON in a `<details>` collapsible.
+
 **REST Endpoints**:
 | Method | Path | Purpose |
 |--------|------|---------|

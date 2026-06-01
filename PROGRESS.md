@@ -53,6 +53,25 @@
   - **Captive portal**: DNS server (all queries → 192.168.4.1) + HTTP 404
     redirect, so joining the setup AP auto-opens the control UI
 
+### Web UI (browser control overhaul)
+- [x] **Virtual joystick** — `<canvas>` touch/mouse pad, knob follows finger,
+  auto-zeros on release, continuous 10 Hz drive loop (zero command on release)
+- [x] **Keyboard control** — WASD / arrow keys feed the same drive loop;
+  diagonals normalised to magnitude ≤ 1.0; ignored while typing in inputs
+- [x] **Browser Gamepad API** — left stick polled in the drive loop (0.08
+  deadzone), "🎮 Gamepad connected" indicator
+- [x] **Drive priority** — joystick > keyboard > gamepad; "Stop (zero)" button
+- [x] **Auto-arm** — moving a control while DISARMED auto-sends `/arm` with a toast
+- [x] **Connection health** — header dot (green <2 s / yellow 2–5 s / red >5 s)
+  with live `/status` latency in ms
+- [x] **Mobile-first Control tab** — large centred joystick, prominent state
+  badge, big E-STOP + floating fixed E-STOP button on small screens
+- [x] **Config range sliders** with live readouts + live expo-curve preview canvas
+- [x] **Polish** — inline 🤖 favicon (no external request), DISARMED hint card,
+  pulsing red page glow in ESTOP, Raw JSON moved to a `<details>` collapsible
+- [x] **Web flasher refresh** — dark theme matching the robot UI, logo,
+  prominent Connect & Flash button (esp-web-tools functionality unchanged)
+
 ### Monitoring (Phase 2)
 - [x] `monitor` component — `motor_monitor.c` (ADC1 oneshot sampling)
 - [x] **Current-sense monitoring** — 4 IS pins at 10 Hz; latches E-STOP on
