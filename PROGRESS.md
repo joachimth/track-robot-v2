@@ -5,7 +5,7 @@
 ## Current Status: 🔧 **CI Build Passing — Awaiting Hardware Test**
 
 **Version**: 0.1.0 (pre-release)
-**Last Updated**: 2026-05-09
+**Last Updated**: 2026-06-01
 
 ---
 
@@ -50,6 +50,16 @@
   - Optional STA home WiFi (saved to NVS via `/wifi`)
   - Drive config via `/config` GET/POST (NVS-backed, reboot to apply)
   - Reboot via `/reboot` POST
+  - **Captive portal**: DNS server (all queries → 192.168.4.1) + HTTP 404
+    redirect, so joining the setup AP auto-opens the control UI
+
+### Monitoring (Phase 2)
+- [x] `monitor` component — `motor_monitor.c` (ADC1 oneshot sampling)
+- [x] **Current-sense monitoring** — 4 IS pins at 10 Hz; latches E-STOP on
+  over-current (`CONFIG_ROBOT_OVERCURRENT_MA`, default 30 A)
+- [x] **Battery voltage monitoring** — optional divider at 1 Hz; low-battery
+  warning (`CONFIG_ROBOT_BATTERY_LOW_MV`, default 10 V); disabled by default
+- [x] Current + battery readings exposed in `/status` and the web UI Control tab
 
 ### CI / CD
 - [x] `ci.yml` — build on every push and PR (ESP-IDF v5.1.2, ESP32 target)
@@ -99,8 +109,11 @@
 ### Phase 2 (After Initial Hardware Validation)
 4. Release **v1.0.0** tag → triggers CI build + GitHub Release
 5. Test web flasher end-to-end
-6. Add current-sense ADC monitoring (overcurrent detection)
-7. Add battery voltage monitoring
+6. ~~Add current-sense ADC monitoring (overcurrent detection)~~ ✅ done — see
+   [docs/monitoring.md](docs/monitoring.md) (calibrate `CONFIG_ROBOT_CURRENT_MV_PER_A`
+   on hardware)
+7. ~~Add battery voltage monitoring~~ ✅ done — wire a divider on a free ADC1 pin
+   and set `CONFIG_ROBOT_BATTERY_ADC_PIN` (disabled by default)
 
 ---
 
@@ -121,7 +134,8 @@
 |-------|---------|-----------|
 | PS4 scan window is ~10 s — miss it and you must reboot | Low | Reboot ESP32; controller reconnects automatically after first pair |
 | No persistent BT pairing storage | Low | Controller re-pairs on power cycle; first scan required each boot |
-| No battery voltage monitoring | Low | Not in v0.1 scope |
+| Battery monitoring needs an external divider on a free ADC1 pin | Low | Disabled by default (`CONFIG_ROBOT_BATTERY_ADC_PIN=-1`); see docs/monitoring.md |
+| Current-sense scaling must be calibrated on hardware | Med | Default `CONFIG_ROBOT_CURRENT_MV_PER_A=118` is an estimate; verify against a known load |
 
 ---
 

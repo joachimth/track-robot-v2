@@ -101,6 +101,11 @@ This file provides instructions and conventions for AI assistants (like Claude) 
                safety_failsafe.h
             safety_failsafe.c
             CMakeLists.txt
+         monitor/
+            include/
+               motor_monitor.h
+            motor_monitor.c
+            CMakeLists.txt
 
    web-flasher/           # Static site for browser-based flashing
       index.html          # Installation + configuration guide
