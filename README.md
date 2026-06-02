@@ -13,6 +13,26 @@ ESP32-based firmware for a tank-style tracked robot controlled by a PS4 DualShoc
 - **Differential Drive**: Tank-style steering with deadzone, expo curves, slow mode
 - **Production Ready**: CI/CD builds, web-based flasher, comprehensive docs
 
+## Web UI
+
+The robot hosts a responsive web interface at `http://192.168.4.1/` (always available via the **TrackRobot-Setup** AP — no app install needed). A captive portal auto-opens it when you connect to the AP on mobile.
+
+| Control (Desktop) | Control (Mobile) |
+|---|---|
+| ![Control desktop](screenshots/screenshot_control_desktop.png) | <img src="screenshots/screenshot_control_mobile.png" height="300"> |
+
+| Config | Status |
+|---|---|
+| ![Config](screenshots/screenshot_config.png) | ![Status](screenshots/screenshot_status.png) |
+
+### Features
+- **Virtual joystick** — touch or mouse, 10 Hz continuous drive, auto-zeros on release
+- **Keyboard control** — WASD or arrow keys
+- **Browser Gamepad API** — plug in a USB controller and drive immediately
+- **Connection health** — live latency dot (green/yellow/red) in the header
+- **Captive portal** — phone auto-opens the UI when joining the AP
+- **Config sliders** — tune deadzone, expo, max speed with live expo curve preview
+
 ## Hardware
 
 ### Components

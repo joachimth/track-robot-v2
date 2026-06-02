@@ -31,6 +31,10 @@ Thumbs.db
 web-flasher/node_modules/
 web-flasher/dist/
 
+# Screenshot tooling (the .png outputs ARE committed; these are not)
+screenshots/node_modules/
+screenshots/ui.html
+
 # Temporary files
 *.tmp
 *.bak

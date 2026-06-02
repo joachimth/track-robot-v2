@@ -1,0 +1,12 @@
+{
+  "name": "track-robot-screenshots",
+  "version": "1.0.0",
+  "description": "Automated web UI screenshots via Playwright",
+  "scripts": {
+    "screenshot": "node screenshot.js",
+    "extract": "node extract_ui.js"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}
