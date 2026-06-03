@@ -62,3 +62,43 @@ jobs:
           firmware/build/track-robot.bin
 
         echo "Rolling latest release updated (commit ${SHORT_SHA})"
+
+  # Render the embedded web UI in headless Chromium and commit fresh
+  # screenshots back to main so README.md always shows the current UI.
+  screenshots:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: screenshots/package-lock.json
+
+      - name: Install Playwright + Chromium
+        run: cd screenshots && npm ci && npx playwright install chromium --with-deps
+
+      - name: Extract web UI HTML
+        run: node screenshots/extract_ui.js
+
+      - name: Generate screenshots
+        run: node screenshots/screenshot.js
+
+      - name: Commit screenshots if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add screenshots/screenshot_*.png
+          if git diff --cached --quiet; then
+            echo "No screenshot changes — skipping commit"
+          else
+            git commit -m "chore: auto-update screenshots [skip ci]"
+            git push origin main
+          fi
