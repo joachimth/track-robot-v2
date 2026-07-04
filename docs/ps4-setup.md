@@ -15,7 +15,7 @@ auto-connecting to any gamepad — put the controller into pairing mode to pair.
 Put the controller into **Bluetooth pairing mode** by holding
 **PS + Share** simultaneously for ~3 seconds until the light bar flashes rapidly.
 
-![PS4 pairing: hold PS and Share together](images/ps4-pairing.png)
+![PS4 pairing: hold PS and Share together](images/ps4-pairing.svg)
 
 The ESP32 (via Bluepad32/BTstack) detects any compatible gamepad and connects
 automatically. You will see on the serial monitor:

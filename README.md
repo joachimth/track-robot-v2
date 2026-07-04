@@ -129,7 +129,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 Hold **PS + Share** together for ~3 seconds until the light bar flashes rapidly.
 
-![PS4 pairing: hold PS and Share together](docs/images/ps4-pairing.png)
+![PS4 pairing: hold PS and Share together](docs/images/ps4-pairing.svg)
 
 The ESP32 scans for ~10 seconds on boot. If pairing fails, reboot and try again.
 After first pairing, press **PS** alone to reconnect on subsequent boots.
